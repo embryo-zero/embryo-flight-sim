@@ -139,6 +139,8 @@ VRManager::VRManager()
         _settings->allowSwapchainMode(osgXR::Settings::SWAPCHAIN_MULTIPLE);
         if (compositorProps->getBoolValue("multiview/intermediates-tiled", false))
             _settings->allowSwapchainMode(osgXR::Settings::SWAPCHAIN_SINGLE);
+        if (compositorProps->getBoolValue("multiview/intermediates-layered", false))
+            _settings->allowSwapchainMode(osgXR::Settings::SWAPCHAIN_LAYERED);
     }
 
     // Only transform nodes in range are updated, so the update callback must be
@@ -278,6 +280,8 @@ void VRManager::setSwapchainMode(const std::string& mode)
         swapchainMode = osgXR::Settings::SWAPCHAIN_MULTIPLE;
     } else if (mode == "SINGLE") {
         swapchainMode = osgXR::Settings::SWAPCHAIN_SINGLE;
+    } else if (mode == "LAYERED") {
+        swapchainMode = osgXR::Settings::SWAPCHAIN_LAYERED;
     }
 
     _settings->setSwapchainMode(swapchainMode);
@@ -335,6 +339,11 @@ void VRManager::doCreateView(osgXR::View *xrView)
     setValue(camNode->getNode("mvr-view-id-geom", true), xrView->getMVRViewIdStr(GL_GEOMETRY_SHADER));
     setValue(camNode->getNode("mvr-view-id-frag", true), xrView->getMVRViewIdStr(GL_FRAGMENT_SHADER));
     setValue(camNode->getNode("mvr-cells", true), (int)xrView->getMVRCells());
+    setValue(camNode->getNode("mvr-layers", true), (int)xrView->getMVRLayers());
+    setValue(camNode->getNode("mvr-attachment-face", true), (int)xrView->getMVRAttachmentFace());
+    setValue(camNode->getNode("mvr-layer-vert", true), xrView->getMVRLayerStr(GL_VERTEX_SHADER));
+    setValue(camNode->getNode("mvr-layer-geom", true), xrView->getMVRLayerStr(GL_GEOMETRY_SHADER));
+    setValue(camNode->getNode("mvr-layer-frag", true), xrView->getMVRLayerStr(GL_FRAGMENT_SHADER));
 
     // Build a camera
     CameraGroup *cgroup = CameraGroup::getDefault();

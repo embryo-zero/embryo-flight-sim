@@ -497,6 +497,11 @@ CameraInfo* CameraGroup::buildCamera(SGPropertyNode* cameraNode)
     info->mvr.viewIdStr[1] = cameraNode->getStringValue("mvr-view-id-geom", "0");
     info->mvr.viewIdStr[2] = cameraNode->getStringValue("mvr-view-id-frag", "0");
     info->mvr.cells = cameraNode->getIntValue("mvr-cells", 1);
+    info->mvr.layers = cameraNode->getIntValue("mvr-layers", 1);
+    info->mvr.attachmentFace = cameraNode->getIntValue("mvr-attachment-face", 0);
+    info->mvr.layerStr[0] = cameraNode->getStringValue("mvr-layer-vert", "0");
+    info->mvr.layerStr[1] = cameraNode->getStringValue("mvr-layer-geom", "0");
+    info->mvr.layerStr[2] = cameraNode->getStringValue("mvr-layer-frag", "0");
 
     osg::Viewport *viewport = new osg::Viewport(
         viewportNode->getDoubleValue("x"),
