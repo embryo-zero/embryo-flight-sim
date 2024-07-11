@@ -135,6 +135,8 @@ VRManager::VRManager()
         _settings->allowVRMode(osgXR::Settings::VRMODE_SLAVE_CAMERAS);
         if (compositorProps->getBoolValue("multiview/sceneview", false))
             _settings->allowVRMode(osgXR::Settings::VRMODE_SCENE_VIEW);
+        if (compositorProps->getBoolValue("multiview/ovr-multiview2", false))
+            _settings->allowVRMode(osgXR::Settings::VRMODE_OVR_MULTIVIEW);
 
         _settings->allowSwapchainMode(osgXR::Settings::SWAPCHAIN_MULTIPLE);
         if (compositorProps->getBoolValue("multiview/intermediates-tiled", false))
@@ -264,6 +266,8 @@ void VRManager::setVRMode(const std::string& mode)
         vrMode = osgXR::Settings::VRMODE_SLAVE_CAMERAS;
     } else if (mode == "SCENE_VIEW") {
         vrMode = osgXR::Settings::VRMODE_SCENE_VIEW;
+    } else if (mode == "OVR_MULTIVIEW") {
+        vrMode = osgXR::Settings::VRMODE_OVR_MULTIVIEW;
     }
 
     _settings->setVRMode(vrMode);
