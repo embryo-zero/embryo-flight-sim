@@ -3,8 +3,12 @@
 
 target_sources(fgfs_test_suite PRIVATE
     TestSuite.cxx
-    testNasalSys.cxx testNasalLib.cxx testGC.cxx benchmarkPropsAccess.cxx testVector.cxx testNasalReload.cxx
-    testNasalSys.hxx testNasalLib.hxx testGC.hxx benchmarkPropsAccess.hxx testVector.hxx testNasalReload.hxx
+    testNasalSys.cxx testNasalLib.cxx testGC.cxx benchmarkPropsAccess.cxx testVector.cxx
+    testNasalSys.hxx testNasalLib.hxx testGC.hxx benchmarkPropsAccess.hxx testVector.hxx
+    testStringFormatting.cxx
+    testStringFormatting.hxx
+    testNasalReload.cxx
+    testNasalReload.hxx
 )
 
 fg_add_test_suite(NasalSysTests      u)
@@ -13,3 +17,4 @@ fg_add_test_suite(NasalLibTests      u)
 fg_add_test_suite(BenchmarkPropsAccess u)
 fg_add_test_suite(VectorTests        u)
 fg_add_test_suite(NasalReloadTests   u)
+fg_add_test_suite(NasalStringFormattingTests        u)

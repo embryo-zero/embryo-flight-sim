@@ -13,17 +13,23 @@
 #endif
 
 #include <algorithm>
-#include <errno.h>
+#include <cassert>
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <set>
 #include <sstream>
-#include <stdio.h>
 #include <string.h>
+#include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unordered_set>
 #include <vector>
+
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include <simgear/debug/ErrorReportingCallback.hxx>
 #include <simgear/io/iostreams/sgstream.hxx>
@@ -57,6 +63,7 @@
 #include "NasalPositioned.hxx"
 #include "NasalSGPath.hxx"
 #include "NasalString.hxx"
+#include "NasalStringFormatting.hxx"
 #include "NasalSys.hxx"
 
 #include "NasalSys_private.hxx"
@@ -346,7 +353,7 @@ naRef FGNasalSys::callMethodWithContext(naContext ctx, naRef code, naRef self, i
         SG_LOG(SG_NASAL, SG_DEV_ALERT, "caught exception invoking nasal method:" << e.what());
         string_list nasalStack;
         logNasalStack(ctx, nasalStack);
-        flightgear::sentryReportNasalError(string{"Exception invoking nasal method:"} + e.what(), nasalStack);
+        flightgear::sentryReportNasalError("Exception invoking nasal method:"s + e.what(), nasalStack);
         return naNil();
     }
 }
@@ -1096,6 +1103,8 @@ void FGNasalSys::init()
     for(i=0; funcs[i].name; i++)
         hashset(d->_globals, funcs[i].name,
                 naNewFunc(d->_context, naNewCCode(d->_context, funcs[i].func)));
+
+    nasal::addStringFormattingFunction(); // add a format() function to Nasal
     nasal::Hash io_module = getGlobals().get<nasal::Hash>("io");
     io_module.set("open", f_open);
     io_module.set("stat", f_custom_stat);
