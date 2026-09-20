@@ -8,7 +8,7 @@
 #include <sstream>
 
 #include <simgear/props/props_io.hxx>
-#include <simgear/structure/SGSourceLocation.hxx>
+#include <simgear/structure/SGDataLocation.hxx>
 
 // Set up function for each test.
 void SimgearPropsTests::setUp()
@@ -88,7 +88,7 @@ void SimgearPropsTests::testPropsCopyIf()
 
 
 // Test that nodes parsed from XML via readProperties() carry a valid
-// SGSourceLocation.  The parser records a location for:
+// SGDataLocation.  The parser records a location for:
 //   - every non-leaf (parent) node, and
 //   - string/unspecified leaf nodes whose value spans more than one line.
 // Single-line leaf nodes (any type) must NOT receive a location.
@@ -116,7 +116,7 @@ void SimgearPropsTests::testPropsXMLSourceLocation()
     // the opening tag on line 3.
     SGPropertyNode* parent = root->getNode("parent");
     CPPUNIT_ASSERT(parent != nullptr);
-    const SGSourceLocation parentLoc = parent->getLocation();
+    const SGDataLocation parentLoc = parent->getLocation();
     CPPUNIT_ASSERT(parentLoc.isValid());
     CPPUNIT_ASSERT_EQUAL(xmlPath, std::string(parentLoc.getPath()));
     CPPUNIT_ASSERT_EQUAL(3, parentLoc.getLine());
@@ -125,7 +125,7 @@ void SimgearPropsTests::testPropsXMLSourceLocation()
     // valid source location pointing to its opening tag on line 4.
     SGPropertyNode* multiline = root->getNode("parent/multiline");
     CPPUNIT_ASSERT(multiline != nullptr);
-    const SGSourceLocation mlLoc = multiline->getLocation();
+    const SGDataLocation mlLoc = multiline->getLocation();
     CPPUNIT_ASSERT(mlLoc.isValid());
     CPPUNIT_ASSERT_EQUAL(xmlPath, std::string(mlLoc.getPath()));
     CPPUNIT_ASSERT_EQUAL(4, mlLoc.getLine());
@@ -146,14 +146,14 @@ void SimgearPropsTests::testPropsXMLSourceLocation()
 
     parent = root2->getNode("parent");
     CPPUNIT_ASSERT(parent != nullptr);
-    const SGSourceLocation parentLoc2 = parent->getLocation();
+    const SGDataLocation parentLoc2 = parent->getLocation();
     CPPUNIT_ASSERT(parentLoc2.isValid());
     CPPUNIT_ASSERT_EQUAL(xmlPath, std::string(parentLoc2.getPath()));
     CPPUNIT_ASSERT_EQUAL(45, parentLoc2.getLine());
 
     multiline = root2->getNode("parent/multiline");
     CPPUNIT_ASSERT(multiline != nullptr);
-    const SGSourceLocation mlLoc2 = multiline->getLocation();
+    const SGDataLocation mlLoc2 = multiline->getLocation();
     CPPUNIT_ASSERT(mlLoc2.isValid());
     CPPUNIT_ASSERT_EQUAL(xmlPath, std::string(mlLoc2.getPath()));
     CPPUNIT_ASSERT_EQUAL(46, mlLoc2.getLine());

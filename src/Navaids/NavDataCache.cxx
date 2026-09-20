@@ -436,7 +436,7 @@ public:
         SG_LOG(SG_NAVCACHE, SG_ALERT, "Sqlite error:" << errMsg << " running:\n\t" << sql);
       }
 
-      throw sg_exception("Sqlite error:" + errMsg, sql);
+      throw sg_exception("Sqlite error:" + errMsg + " running:\n\t" + sql);
     }
 
   void runSQL(const string& sql)
@@ -476,7 +476,7 @@ public:
     if (sqlite3_reset(stmt) != SQLITE_OK) {
       string errMsg = sqlite3_errmsg(db);
       SG_LOG(SG_NAVCACHE, SG_ALERT, "Sqlite error resetting:" << errMsg);
-      throw sg_exception("Sqlite error resetting:" + errMsg, sqlite3_sql(stmt));
+      throw sg_exception("Sqlite error resetting:" + errMsg + " (" + sqlite3_sql(stmt) + ")");
     }
   }
 
@@ -528,7 +528,7 @@ public:
              << ") while running:\n\t" << sqlite3_sql(stmt));
     }
 
-    throw sg_exception("Sqlite error:" + errMsg, sqlite3_sql(stmt));
+    throw sg_exception("Sqlite error:" + errMsg + " (" + sqlite3_sql(stmt) + ")");
   }
 
   void execSelect1(sqlite3_stmt_ptr stmt)
@@ -536,7 +536,7 @@ public:
     if (!execSelect(stmt)) {
       SG_LOG(SG_NAVCACHE, SG_WARN, "empty SELECT running:\n\t" << sqlite3_sql(stmt));
       flightgear::sentryReportException("empty SELECT running:" + std::string{sqlite3_sql(stmt)});
-      throw sg_exception("no results returned for select", sqlite3_sql(stmt));
+      throw sg_exception(std::string("no results returned for select: ") + sqlite3_sql(stmt));
     }
   }
 

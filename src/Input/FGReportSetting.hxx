@@ -15,9 +15,9 @@
 #include <simgear/nasal/cppbind/NasalCode.hxx>
 #include <simgear/props/condition.hxx>
 #include <simgear/props/props.hxx>
+#include <simgear/structure/SGDataLocation.hxx>
 #include <simgear/structure/SGReferenced.hxx>
 #include <simgear/structure/SGSharedPtr.hxx>
-#include <simgear/structure/SGSourceLocation.hxx>
 
 /// TODO: document
 class FGEventSetting : public SGReferenced
@@ -77,7 +77,7 @@ protected:
 
     bool dirty = true;
     bool error = false;
-    SGSourceLocation location;
+    SGDataLocation location;
 
     // we only dirty when the value of a watched node changes.
     // record the value as a string

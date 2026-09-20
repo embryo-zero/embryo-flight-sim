@@ -42,13 +42,13 @@ bool DefaultTranslationParser::asBoolean(const string& str)
     const string message = ("invalid boolean value '" + str +
                             "' (expected 'true' or 'false')");
     const sg_location location(getPath(), getLine(), getColumn());
-    throw sg_io_exception(message, location, SG_ORIGIN, false);
+    throw sg_io_exception(message, location, std::string{}, false);
 }
 
 [[noreturn]] void DefaultTranslationParser::parseError(const string& message)
 {
     const sg_location location(getPath(), getLine(), getColumn());
-    throw sg_io_exception(message, location, SG_ORIGIN, false);
+    throw sg_io_exception(message, location, std::string{}, false);
 }
 
 void DefaultTranslationParser::startElement(const char* name,

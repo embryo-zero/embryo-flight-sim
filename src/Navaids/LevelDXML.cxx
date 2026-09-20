@@ -47,7 +47,9 @@ void NavdataVisitor::startElement(const char* name, const XMLAttributes &atts)
   if (tag == "Airport") {
     string icao(atts.getValue("ICAOcode"));
     if (_airport->ident() != icao) {
-      throw sg_format_exception("Airport and ICAO mismatch", icao, _path.utf8Str());
+        sg_format_exception ex("Airport and ICAO mismatch", icao);
+        ex.setLocation(sg_location(_path, getLine(), getColumn()));
+        throw ex;
     }
   } else if (tag == "Sid") {
     string ident(atts.getValue("Name"));

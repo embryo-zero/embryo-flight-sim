@@ -1990,11 +1990,11 @@ std::string FlightPlan::icaoAircraftCategory() const
 void FlightPlan::setIcaoAircraftCategory(const std::string& cat)
 {
     if (cat.empty()) {
-        throw sg_range_exception("Invalid ICAO aircraft category:", cat);
+        throw sg_range_exception("Invalid ICAO aircraft category: '" + cat + "'");
     }
 
     if ((cat[0] < ICAO_AIRCRAFT_CATEGORY_A) || (cat[0] > ICAO_AIRCRAFT_CATEGORY_E)) {
-        throw sg_range_exception("Invalid ICAO aircraft category:", cat);
+        throw sg_range_exception("Invalid ICAO aircraft category: '" + cat + "'");
     }
 
     _aircraftCategory = cat[0];

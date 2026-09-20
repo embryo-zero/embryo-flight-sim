@@ -244,7 +244,8 @@ void ArrivalDeparture::addRunwayTransition(FGRunwayRef aWay, Transition* aTrans)
 {
   assert(aWay->ident() == aTrans->ident());
   if (!isForRunway(aWay)) {
-    throw sg_io_exception("adding transition for unspecified runway:" + aWay->ident(), ident());
+      throw sg_io_exception("adding transition for unspecified runway '" + aWay->ident() +
+                            "' in procedure '" + ident() + "'");
   }
 
   aTrans->mark(flagType());
