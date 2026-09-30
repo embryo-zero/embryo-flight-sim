@@ -1124,12 +1124,9 @@ void FGNasalSys::init()
         // so don't do this for testing.
         NasalClipboard::init(this);
 #endif
-        initNasalCanvas(d->_globals, d->_context);
         initNasalCondition(d->_globals, d->_context);
         initNasalHTTP(d->_globals, d->_context);
         initNasalSGPath(d->_globals, d->_context);
-
-        NewGUI::registerNasalBindings(this);
     }
 
     initNasalInput(d->_globals, d->_context);
@@ -1404,14 +1401,27 @@ void FGNasalSys::loadPropertyScripts()
     }
 }
 
+void FGNasalSys::loadNativeModule(const std::string& moduleName)
+{
+    if (moduleName == "gui") {
+        NewGUI::registerNasalBindings(this);
+    } else if (moduleName == "canvas") {
+        initNasalCanvas(d->_globals, d->_context);
+    }
+}
+
 // Loads the scripts found under /nasal in the global tree
 void FGNasalSys::loadPropertyScripts(SGPropertyNode* n)
 {
     bool is_loaded = false;
 
     std::string module = n->getNameString();
-    if(n->hasChild("module"))
+    if (n->hasChild("module")) {
         module = n->getStringValue("module");
+    }
+
+    loadNativeModule(module);
+
     if (n->getBoolValue("enabled",true))
     {
         // allow multiple files to be specified within a single
@@ -1597,6 +1607,11 @@ bool FGNasalSys::createModule(const char* moduleName, const char* fileName,
 
 void FGNasalSys::deleteModule(const char* moduleName)
 {
+    // native shutdown hook
+    if (strcmp(moduleName, "gui") == 0) {
+        NewGUI::shutdownNasalBindings();
+    }
+
     if (!d->_inited || naIsNil(d->_globals)) {
         // can occur on shutdown due to us being shutdown first, but other
         // subsystems having Nasal objects.
@@ -1650,6 +1665,12 @@ bool FGNasalSys::reloadModuleFromFile(const std::string& moduleName)
     if (moduleNode) {
         deleteModule(moduleName.c_str());
         loadPropertyScripts(moduleNode);
+
+        // module-specific hacks
+        if (moduleName == "gui") {
+            postinitNasalGUI(d->_globals, d->_context);
+        }
+
         return true;
     } else {
         // assume it's a single-file module for now

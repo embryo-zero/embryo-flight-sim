@@ -61,18 +61,17 @@ namespace {
             }
         }
 
-        virtual void valueChanged(SGPropertyNode *node)
-        {
-            CocoaAutoreleasePool pool;
-            if (node == enableProp) {
-              BOOL b = node->getBoolValue();
-              [item setEnabled:b];
-            }
+        void valueChanged(SGPropertyNode *node) override {
+          CocoaAutoreleasePool pool;
+          if (node == enableProp) {
+            BOOL b = node->getBoolValue();
+            [item setEnabled:b];
+          }
 
-            if (node == checkedProp) {
-              auto b = node->getBoolValue();
-              item.state = b ? NSControlStateValueOn : NSControlStateValueOff;
-            }
+          if (node == checkedProp) {
+            auto b = node->getBoolValue();
+            item.state = b ? NSControlStateValueOn : NSControlStateValueOff;
+          }
         }
 
     private:
@@ -96,7 +95,7 @@ public:
   CocoaMenuDelegate* delegate;
 
   MenuItemBindings itemBindings;
-    std::vector<CocoaItemListener*> listeners;
+  std::vector<CocoaItemListener *> listeners;
 };
 
 @interface CocoaMenuDelegate : NSObject <NSMenuDelegate> {
@@ -295,16 +294,8 @@ FGCocoaMenuBar::~FGCocoaMenuBar()
         [topLevelItem.submenu removeAllItems];
     }
 
-    for (auto it = p->listeners.begin(); it != p->listeners.end(); ++it) {
-        delete *it;
-    }
-
-    // owing to the bizarre destructor behaviour of SGBinding, we need
-    // to explicitly clear these bindings. (PUIMenuBar takes a different
-    // approach, and copies each binding into /sim/bindings)
-    MenuItemBindings::iterator j;
-    for (j = p->itemBindings.begin(); j != p->itemBindings.end(); ++j) {
-        clearBindingList(j->second);
+    for (auto l : p->listeners) {
+      delete l;
     }
 }
 

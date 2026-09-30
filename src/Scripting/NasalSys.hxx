@@ -191,6 +191,8 @@ private:
 
     void initLogLevelConstants();
 
+    void loadNativeModule(const std::string& moduleName);
+
     void loadPropertyScripts();
     void loadPropertyScripts(SGPropertyNode* n);
     void loadNasalScripts();

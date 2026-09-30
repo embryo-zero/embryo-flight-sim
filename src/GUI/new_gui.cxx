@@ -225,6 +225,10 @@ NewGUI::reset (bool reload)
     for (auto d : openDialogs)
         closeDialog(d);
 
+    // ensure previous menubar is destroyed before creating the
+    // new implementation, otherwise macOS/Cocoa is sad.
+    _menubar.reset();
+
     setStyle();
 
     unbind();
