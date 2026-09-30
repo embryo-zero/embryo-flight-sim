@@ -1681,3 +1681,6 @@ UseTab: Never
 
 ---
 Language: ObjC
+
+---
+Language: Json

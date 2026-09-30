@@ -35,9 +35,6 @@ using namespace std::string_literals;
 using namespace flightgear;
 using namespace FGTestApi::flightplan;
 
-static bool static_haveProcedures = false;
-
-
 /////////////////////////////////////////////////////////////////////////////
 
 namespace {
@@ -219,12 +216,6 @@ void FlightplanTests::setUp()
     FGTestApi::setUp::initTestGlobals("flightplan"s);
     FGTestApi::setUp::initNavDataCache();
 
-    SGPath proceduresPath = SGPath::fromEnv("FG_PROCEDURES_PATH");
-    if (proceduresPath.exists()) {
-        static_haveProcedures = true;
-        globals->append_fg_scenery(proceduresPath);
-    }
-
     globals->get_subsystem_mgr()->bind();
     globals->get_subsystem_mgr()->init();
     globals->get_subsystem_mgr()->postinit();
@@ -381,9 +372,6 @@ void FlightplanTests::testRoutePathFinalLegVQPR15()
 {
     // test behaviour of RoutePath when the last leg prior to the arrival runway
     // is beyond the runway. This occurs in Paro RNAVZ15 approach.
-
-    if (!static_haveProcedures)
-        return;
 
     static_factory = std::make_shared<TestFPDelegateFactory>();
     FlightPlan::registerDelegateFactory(static_factory);
@@ -1158,9 +1146,6 @@ void FlightplanTests::loadFGFPWithEmbeddedProcedures()
 
 void FlightplanTests::loadFGFPWithOldProcedures()
 {
-    if (!static_haveProcedures)
-        return;
-
     FlightPlanRef f = FlightPlan::create();
 
     SGPath fgfpPath = simgear::Dir::current().path() / "test_fgfp_old_procedure_idents.fgfp"s;
@@ -1200,9 +1185,6 @@ void FlightplanTests::loadFGFPWithOldProcedures()
 
 void FlightplanTests::loadFGFPWithProcedureIdents()
 {
-    if (!static_haveProcedures)
-        return;
-
     FlightPlanRef f = FlightPlan::create();
 
     SGPath fgfpPath = simgear::Dir::current().path() / "test_fgfp_procedure_idents.fgfp"s;
@@ -1427,11 +1409,8 @@ void FlightplanTests::testCloningFGFP()
     CPPUNIT_ASSERT_EQUAL(7, fp2->numLegs());
 }
 
-void FlightplanTests::testCloningProcedures() {
-    // procedures not loaded, abandon test
-    if (!static_haveProcedures)
-        return;
-
+void FlightplanTests::testCloningProcedures()
+{
     static_factory = std::make_shared<TestFPDelegateFactory>();
     FlightPlan::registerDelegateFactory(static_factory);
 
@@ -1466,7 +1445,6 @@ void FlightplanTests::testCloningProcedures() {
 void FlightplanTests::testBug2616()
 {
     auto edty = FGAirport::findByIdent("EDTY"s);
-    edty->testSuiteInjectProceduresXML(SGPath::fromUtf8(FG_TEST_SUITE_DATA) / "EDTY.procedures.xml");
 
     auto ils28Approach = edty->findApproachWithIdent("ILS28"s);
     CPPUNIT_ASSERT(ils28Approach);
