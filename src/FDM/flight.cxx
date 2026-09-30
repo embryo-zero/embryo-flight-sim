@@ -39,10 +39,11 @@ namespace {
 class TrackComputer
 {
 public:
-    inline TrackComputer(double& track, double& path, const SGGeod& position) : _track(track),
-                                                                                _path(path),
-                                                                                _position(position),
-                                                                                _prevPosition(position)
+    inline TrackComputer(double& track, double& path, const SGGeod& position)
+        : _track(track),
+          _path(path),
+          _position(position),
+          _prevPosition(position)
     {
     }
 

@@ -12,9 +12,10 @@
 
 using std::string;
 
-FGButtonEvent::FGButtonEvent(FGInputDevice* device, SGPropertyNode_ptr eventNode) : FGInputEvent(device, eventNode),
-                                                                                    repeatable(false),
-                                                                                    lastState(false)
+FGButtonEvent::FGButtonEvent(FGInputDevice* device, SGPropertyNode_ptr eventNode)
+    : FGInputEvent(device, eventNode),
+      repeatable(false),
+      lastState(false)
 {
     repeatable = eventNode->getBoolValue("repeatable", repeatable);
     if (eventNode->hasChild("output-mode")) {

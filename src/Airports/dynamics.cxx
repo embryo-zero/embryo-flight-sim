@@ -42,9 +42,10 @@ using std::vector;
 class ParkingAssignment::ParkingAssignmentPrivate
 {
 public:
-    ParkingAssignmentPrivate(FGParking* pk, FGAirportDynamics* dyn) : refCount(0),
-                                                                      parking(pk),
-                                                                      dynamics(dyn)
+    ParkingAssignmentPrivate(FGParking* pk, FGAirportDynamics* dyn)
+        : refCount(0),
+          parking(pk),
+          dynamics(dyn)
     {
         assert(pk);
         assert(dyn);
@@ -79,7 +80,8 @@ public:
     SGWeakPtr<FGAirportDynamics> dynamics;
 };
 
-ParkingAssignment::ParkingAssignment() : _sharedData(NULL)
+ParkingAssignment::ParkingAssignment()
+    : _sharedData(NULL)
 {
 }
 
@@ -90,14 +92,16 @@ ParkingAssignment::~ParkingAssignment()
     }
 }
 
-ParkingAssignment::ParkingAssignment(FGParking* pk, FGAirportDynamics* dyn) : _sharedData(NULL)
+ParkingAssignment::ParkingAssignment(FGParking* pk, FGAirportDynamics* dyn)
+    : _sharedData(NULL)
 {
     if (pk) {
         _sharedData = new ParkingAssignmentPrivate(pk, dyn);
     }
 }
 
-ParkingAssignment::ParkingAssignment(const ParkingAssignment& other) : _sharedData(other._sharedData)
+ParkingAssignment::ParkingAssignment(const ParkingAssignment& other)
+    : _sharedData(other._sharedData)
 {
     if (_sharedData) {
         _sharedData->retain();
@@ -150,7 +154,8 @@ FGParking* ParkingAssignment::parking() const
 class NearbyAIObjectCache
 {
 public:
-    explicit NearbyAIObjectCache(FGAirportRef apt) : m_airport(apt)
+    explicit NearbyAIObjectCache(FGAirportRef apt)
+        : m_airport(apt)
     {
     }
 
@@ -195,14 +200,16 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-FGAirportDynamics::FGAirportDynamics(FGAirport* ap) : _ap(ap), rwyPrefs(ap),
-                                                      startupController(this),
-                                                      towerController(this),
-                                                      approachController(this),
-                                                      groundController(this),
-                                                      lastUpdate{0},
-                                                      atisSequenceIndex(-1),
-                                                      atisSequenceTimeStamp(0.0)
+FGAirportDynamics::FGAirportDynamics(FGAirport* ap)
+    : _ap(ap),
+      rwyPrefs(ap),
+      startupController(this),
+      towerController(this),
+      approachController(this),
+      groundController(this),
+      lastUpdate{0},
+      atisSequenceIndex(-1),
+      atisSequenceTimeStamp(0.0)
 {
 }
 
@@ -384,9 +391,10 @@ class GetParkingsPredicate
     const FGAirportDynamics* dynamics;
 
 public:
-    GetParkingsPredicate(bool b, const std::string& ty, const FGAirportDynamics* dyn) : mustBeAvailable(b),
-                                                                                        type(ty),
-                                                                                        dynamics(dyn)
+    GetParkingsPredicate(bool b, const std::string& ty, const FGAirportDynamics* dyn)
+        : mustBeAvailable(b),
+          type(ty),
+          dynamics(dyn)
     {
     }
 
@@ -453,7 +461,8 @@ typedef std::vector<FGRunwayRef> RunwayVec;
 class FallbackRunwayGroup
 {
 public:
-    explicit FallbackRunwayGroup(const FGRunwayRef& rwy) : _groupScore(0.0)
+    explicit FallbackRunwayGroup(const FGRunwayRef& rwy)
+        : _groupScore(0.0)
     {
         runways.push_back(rwy);
         _leadRunwayScore = runwayScore(rwy);
@@ -540,8 +549,9 @@ private:
 class WindExclusionCheck
 {
 public:
-    WindExclusionCheck(double windHeading, double windSpeedKts) : _windSpeedKts(windSpeedKts),
-                                                                  _windHeading(windHeading)
+    WindExclusionCheck(double windHeading, double windSpeedKts)
+        : _windSpeedKts(windSpeedKts),
+          _windHeading(windHeading)
     {
     }
 

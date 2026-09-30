@@ -99,7 +99,8 @@ std::string ScheduleTime::getName(time_t dayStart)
  * RunwayList
  *****************************************************************************/
 
-RunwayList::RunwayList(const RunwayList& other) : type{other.type}
+RunwayList::RunwayList(const RunwayList& other)
+    : type{other.type}
 {
     stringVecConstIterator i;
     for (i = other.preferredRunways.begin();
@@ -145,7 +146,8 @@ void RunwayList::clear()
  *
  ***************************************************************************/
 
-RunwayGroup::RunwayGroup(const RunwayGroup& other) : name{other.name}
+RunwayGroup::RunwayGroup(const RunwayGroup& other)
+    : name{other.name}
 {
     RunwayListVecConstIterator i;
     for (i = other.rwyList.begin(); i != other.rwyList.end(); ++i)
@@ -367,16 +369,18 @@ void RunwayGroup::getActive(int i, std::string& name, std::string& type)
 /*****************************************************************************
  * FGRunway preference
  ****************************************************************************/
-FGRunwayPreference::FGRunwayPreference(FGAirport* ap) : _ap{ap}
+FGRunwayPreference::FGRunwayPreference(FGAirport* ap)
+    : _ap{ap}
 {
     //cerr << "Running default Constructor" << endl;
     initialized = false;
 }
 
-FGRunwayPreference::FGRunwayPreference(const FGRunwayPreference& other) : _ap{other._ap},
-                                                                          comTimes{other.comTimes},
-                                                                          genTimes{other.genTimes},
-                                                                          milTimes{other.milTimes}
+FGRunwayPreference::FGRunwayPreference(const FGRunwayPreference& other)
+    : _ap{other._ap},
+      comTimes{other.comTimes},
+      genTimes{other.genTimes},
+      milTimes{other.milTimes}
 {
     initialized = other.initialized;
 

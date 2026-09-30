@@ -14,13 +14,14 @@
 class NearestCarrierToNotification : public simgear::Emesary::INotification
 {
 public:
-    explicit NearestCarrierToNotification(SGGeod _comparisonPosition) : position(),
-                                                                        comparisonPosition(_comparisonPosition),
-                                                                        heading(0),
-                                                                        vckts(0),
-                                                                        deckheight(0),
-                                                                        distanceMeters(std::numeric_limits<double>::max()),
-                                                                        carrier(0)
+    explicit NearestCarrierToNotification(SGGeod _comparisonPosition)
+        : position(),
+          comparisonPosition(_comparisonPosition),
+          heading(0),
+          vckts(0),
+          deckheight(0),
+          distanceMeters(std::numeric_limits<double>::max()),
+          carrier(0)
     {
     }
 

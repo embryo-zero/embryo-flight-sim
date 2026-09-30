@@ -37,8 +37,9 @@ static double processPosition(const string& pos)
     return sign * (stoi(degree) + (stof(decimal) / 60.0));
 }
 
-FGGroundNetXMLLoader::FGGroundNetXMLLoader(FGGroundNetwork* net) : XMLVisitor(),
-                                                                   _groundNetwork(net)
+FGGroundNetXMLLoader::FGGroundNetXMLLoader(FGGroundNetwork* net)
+    : XMLVisitor(),
+      _groundNetwork(net)
 {
 }
 

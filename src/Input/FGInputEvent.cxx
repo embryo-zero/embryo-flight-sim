@@ -36,9 +36,10 @@ FGInputEvent* FGInputEvent::NewObject(FGInputDevice* device, SGPropertyNode_ptr 
     return new FGInputEvent(device, eventNode);
 }
 
-FGInputEvent::FGInputEvent(FGInputDevice* aDevice, SGPropertyNode_ptr eventNode) : device(aDevice),
-                                                                                   lastDt(0.0),
-                                                                                   lastSettingValue(std::numeric_limits<float>::quiet_NaN())
+FGInputEvent::FGInputEvent(FGInputDevice* aDevice, SGPropertyNode_ptr eventNode)
+    : device(aDevice),
+      lastDt(0.0),
+      lastSettingValue(std::numeric_limits<float>::quiet_NaN())
 {
     name = eventNode->getStringValue("name", "");
     desc = eventNode->getStringValue("desc", "");

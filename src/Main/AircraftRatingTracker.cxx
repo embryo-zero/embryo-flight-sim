@@ -68,9 +68,10 @@ void clearPendingRatingSubmission(const std::string& qualifiedId)
 class RatingSubmissionRequest : public simgear::HTTP::Request
 {
 public:
-    RatingSubmissionRequest(const std::string& url, const simgear::pkg::PackageRef& pkg, int rating) : simgear::HTTP::Request(url, "POST"),
-                                                                                                       m_package(pkg),
-                                                                                                       m_rating(rating)
+    RatingSubmissionRequest(const std::string& url, const simgear::pkg::PackageRef& pkg, int rating)
+        : simgear::HTTP::Request(url, "POST"),
+          m_package(pkg),
+          m_rating(rating)
     {
         requestHeader("User-Agent") = "FlightGear-Launcher-Ratings/1";
     }

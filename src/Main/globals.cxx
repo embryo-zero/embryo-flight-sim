@@ -55,9 +55,10 @@
 class AircraftResourceProvider : public simgear::ResourceProvider
 {
 public:
-    AircraftResourceProvider() : simgear::ResourceProvider(simgear::ResourceManager::PRIORITY_HIGH,
-                                                           {simgear::ResourceManager::FileType::Font},
-                                                           simgear::ResourceManager::ProviderCategory::Aircraft)
+    AircraftResourceProvider()
+        : simgear::ResourceProvider(simgear::ResourceManager::PRIORITY_HIGH,
+                                    {simgear::ResourceManager::FileType::Font},
+                                    simgear::ResourceManager::ProviderCategory::Aircraft)
     {
     }
 
@@ -118,10 +119,11 @@ class CurrentAircraftDirProvider : public simgear::ResourceProvider
 public:
     // Note we currently don't scan the current aircraft for Nasal,
     // since this would likely duplicate explicit loading inside -set.xml
-    CurrentAircraftDirProvider() : simgear::ResourceProvider(simgear::ResourceManager::PRIORITY_HIGH,
-                                                             {simgear::ResourceManager::FileType::Font,
-                                                              simgear::ResourceManager::FileType::GUIDialog},
-                                                             simgear::ResourceManager::ProviderCategory::Aircraft)
+    CurrentAircraftDirProvider()
+        : simgear::ResourceProvider(simgear::ResourceManager::PRIORITY_HIGH,
+                                    {simgear::ResourceManager::FileType::Font,
+                                     simgear::ResourceManager::FileType::GUIDialog},
+                                    simgear::ResourceManager::ProviderCategory::Aircraft)
     {
     }
 
@@ -152,16 +154,17 @@ FGGlobals* globals = NULL;
 
 
 // Constructor
-FGGlobals::FGGlobals() : renderer(NULL),
-                         subsystem_mgr(new SGSubsystemMgr),
-                         event_mgr(new SGEventMgr),
-                         sim_time_sec(0.0),
-                         time_params(NULL),
-                         commands(SGCommandMgr::instance()),
-                         channel_options_list(NULL),
-                         initial_waypoints(NULL),
-                         channellist(NULL),
-                         haveUserSettings(false)
+FGGlobals::FGGlobals()
+    : renderer(NULL),
+      subsystem_mgr(new SGSubsystemMgr),
+      event_mgr(new SGEventMgr),
+      sim_time_sec(0.0),
+      time_params(NULL),
+      commands(SGCommandMgr::instance()),
+      channel_options_list(NULL),
+      initial_waypoints(NULL),
+      channellist(NULL),
+      haveUserSettings(false)
 {
     SGPropertyNode* root = new SGPropertyNode;
     props = SGPropertyNode_ptr(root);

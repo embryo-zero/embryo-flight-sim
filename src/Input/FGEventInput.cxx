@@ -21,8 +21,9 @@ using namespace std::string_literals;
 
 FGEventInput::FGEventInput() = default;
 
-FGEventInput::FGEventInput(const char* filePath, const char* propertyRoot) : filePath(filePath),
-                                                                             propertyRoot(propertyRoot)
+FGEventInput::FGEventInput(const char* filePath, const char* propertyRoot)
+    : filePath(filePath),
+      propertyRoot(propertyRoot)
 {
 }
 

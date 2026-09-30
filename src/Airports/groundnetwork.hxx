@@ -29,7 +29,9 @@ private:
     time_t touch;
 
 public:
-    Block(int i, time_t bt, time_t curr) : blocktime{bt}, touch{curr}
+    Block(int i, time_t bt, time_t curr)
+        : blocktime{bt},
+          touch{curr}
     {
         id = i;
     }
@@ -118,8 +120,11 @@ public:
 class FGIntersectedTaxiSegment : public FGTaxiSegment
 {
 public:
-    FGIntersectedTaxiSegment(FGTaxiNode* start, const SGGeod& intersectionPoint, FGTaxiNode* end) : FGTaxiSegment(start, end),
-                                                                                                    m_intersection(intersectionPoint) {}
+    FGIntersectedTaxiSegment(FGTaxiNode* start, const SGGeod& intersectionPoint, FGTaxiNode* end)
+        : FGTaxiSegment(start, end),
+          m_intersection(intersectionPoint)
+    {
+    }
 
     void setIntersection(const SGGeod& pt)
     {
@@ -170,12 +175,15 @@ public:
         return *this;
     }
 
-    FGTaxiRoute(const FGTaxiRoute& copy) : nodes(copy.nodes),
-                                           routes(copy.routes),
-                                           distance(copy.distance),
-                                           score(copy.score),
-                                           currNode(nodes.begin()),
-                                           currRoute(routes.begin()) {}
+    FGTaxiRoute(const FGTaxiRoute& copy)
+        : nodes(copy.nodes),
+          routes(copy.routes),
+          distance(copy.distance),
+          score(copy.score),
+          currNode(nodes.begin()),
+          currRoute(routes.begin())
+    {
+    }
 
     bool operator<(const FGTaxiRoute& other) const
     {

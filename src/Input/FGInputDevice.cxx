@@ -22,9 +22,10 @@ using std::map;
 using std::string;
 using namespace std::string_literals;
 
-FGInputDevice::FGInputDevice(std::string aName, std::string aSerial) : name(aName),
-                                                                       serialNumber(aSerial),
-                                                                       _configListener(std::make_unique<PrivateListener>(this))
+FGInputDevice::FGInputDevice(std::string aName, std::string aSerial)
+    : name(aName),
+      serialNumber(aSerial),
+      _configListener(std::make_unique<PrivateListener>(this))
 {
 }
 

@@ -9,10 +9,11 @@
 
 namespace flightgear {
 
-CommStation::CommStation(PositionedID aGuid, const std::string& name, FGPositioned::Type t, const SGGeod& pos, int range, int freq) : FGPositioned(aGuid, t, name, pos),
-                                                                                                                                      mRangeNM(range),
-                                                                                                                                      mFreqKhz(freq),
-                                                                                                                                      mAirport(0)
+CommStation::CommStation(PositionedID aGuid, const std::string& name, FGPositioned::Type t, const SGGeod& pos, int range, int freq)
+    : FGPositioned(aGuid, t, name, pos),
+      mRangeNM(range),
+      mFreqKhz(freq),
+      mAirport(0)
 {
 }
 

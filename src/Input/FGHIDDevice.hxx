@@ -48,9 +48,10 @@ public:
     class Item
     {
     public:
-        Item(const std::string& n, uint32_t offset, uint8_t size) : name(n),
-                                                                    bitOffset(offset),
-                                                                    bitSize(size)
+        Item(const std::string& n, uint32_t offset, uint8_t size)
+            : name(n),
+              bitOffset(offset),
+              bitSize(size)
         {
         }
 
@@ -88,7 +89,11 @@ private:
     class Report
     {
     public:
-        Report(HID::ReportType ty, uint8_t n = 0) : type(ty), number(n) {}
+        Report(HID::ReportType ty, uint8_t n = 0)
+            : type(ty),
+              number(n)
+        {
+        }
 
         HID::ReportType type;
         uint8_t number = 0;

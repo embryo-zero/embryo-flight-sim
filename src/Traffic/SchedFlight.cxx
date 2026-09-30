@@ -55,27 +55,29 @@ using std::string;
 
 std::map<std::string, std::string> FGScheduledFlight::missingAirports = std::map<std::string, std::string>();
 
-FGScheduledFlight::FGScheduledFlight() : departurePort{nullptr},
-                                         arrivalPort{nullptr},
-                                         departureTime{0},
-                                         arrivalTime{0},
-                                         repeatPeriod{0}
+FGScheduledFlight::FGScheduledFlight()
+    : departurePort{nullptr},
+      arrivalPort{nullptr},
+      departureTime{0},
+      arrivalTime{0},
+      repeatPeriod{0}
 {
     cruiseAltitude = 0;
     initialized = false;
     available = true;
 }
 
-FGScheduledFlight::FGScheduledFlight(const FGScheduledFlight& other) : callsign{other.callsign},
-                                                                       fltRules{other.fltRules},
-                                                                       departurePort{other.departurePort},
-                                                                       arrivalPort{other.arrivalPort},
-                                                                       depId{other.depId},
-                                                                       arrId{other.arrId},
-                                                                       requiredAircraft{other.requiredAircraft},
-                                                                       departureTime{other.departureTime},
-                                                                       arrivalTime{other.arrivalTime},
-                                                                       repeatPeriod{other.repeatPeriod}
+FGScheduledFlight::FGScheduledFlight(const FGScheduledFlight& other)
+    : callsign{other.callsign},
+      fltRules{other.fltRules},
+      departurePort{other.departurePort},
+      arrivalPort{other.arrivalPort},
+      depId{other.depId},
+      arrId{other.arrId},
+      requiredAircraft{other.requiredAircraft},
+      departureTime{other.departureTime},
+      arrivalTime{other.arrivalTime},
+      repeatPeriod{other.repeatPeriod}
 {
     cruiseAltitude = other.cruiseAltitude;
     initialized = other.initialized;
@@ -97,13 +99,14 @@ FGScheduledFlight::FGScheduledFlight(const string& cs,
                                      const string& deptime,
                                      const string& arrtime,
                                      const string& rep,
-                                     const string& reqAC) : callsign{cs},
-                                                            fltRules{fr},
-                                                            departurePort{nullptr},
-                                                            arrivalPort{nullptr},
-                                                            depId{depPrt},
-                                                            arrId{arrPrt},
-                                                            requiredAircraft{reqAC}
+                                     const string& reqAC)
+    : callsign{cs},
+      fltRules{fr},
+      departurePort{nullptr},
+      arrivalPort{nullptr},
+      depId{depPrt},
+      arrId{arrPrt},
+      requiredAircraft{reqAC}
 {
     //departurePort.setId(depPrt);
     //arrivalPort.setId(arrPrt);

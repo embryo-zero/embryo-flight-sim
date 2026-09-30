@@ -22,43 +22,45 @@ PerformanceData* PerformanceData::getDefaultData()
     return &static_instance;
 }
 
-PerformanceData::PerformanceData() : _acceleration(4.0),
-                                     _deceleration(2.0),
-                                     _brakeDeceleration(20.0),
-                                     _climbRate(3000.0),
-                                     _descentRate(1500.0),
-                                     _vRotate(150.0),
-                                     _vTakeOff(160.0),
-                                     _vClimb(300.0),
-                                     _vCruise(430.0),
-                                     _vDescent(300.0),
-                                     _vApproach(170.0),
-                                     _vTouchdown(150.0),
-                                     _vTaxi(15.0),
-                                     _wingSpan(100.0),
-                                     _wingChord(12.0),
-                                     _weight(90000.0)
+PerformanceData::PerformanceData()
+    : _acceleration(4.0),
+      _deceleration(2.0),
+      _brakeDeceleration(20.0),
+      _climbRate(3000.0),
+      _descentRate(1500.0),
+      _vRotate(150.0),
+      _vTakeOff(160.0),
+      _vClimb(300.0),
+      _vCruise(430.0),
+      _vDescent(300.0),
+      _vApproach(170.0),
+      _vTouchdown(150.0),
+      _vTaxi(15.0),
+      _wingSpan(100.0),
+      _wingChord(12.0),
+      _weight(90000.0)
 {
     _rollrate = 9.0; // degrees per second
     _maxbank = 30.0; // passenger friendly bank angle
 }
 
-PerformanceData::PerformanceData(const PerformanceData* clone) : _acceleration(clone->_acceleration),
-                                                                 _deceleration(clone->_deceleration),
-                                                                 _brakeDeceleration(clone->_brakeDeceleration),
-                                                                 _climbRate(clone->_climbRate),
-                                                                 _descentRate(clone->_descentRate),
-                                                                 _vRotate(clone->_vRotate),
-                                                                 _vTakeOff(clone->_vTakeOff),
-                                                                 _vClimb(clone->_vClimb),
-                                                                 _vCruise(clone->_vCruise),
-                                                                 _vDescent(clone->_vDescent),
-                                                                 _vApproach(clone->_vApproach),
-                                                                 _vTouchdown(clone->_vTouchdown),
-                                                                 _vTaxi(clone->_vTaxi),
-                                                                 _wingSpan(clone->_wingSpan),
-                                                                 _wingChord(clone->_wingChord),
-                                                                 _weight(clone->_weight)
+PerformanceData::PerformanceData(const PerformanceData* clone)
+    : _acceleration(clone->_acceleration),
+      _deceleration(clone->_deceleration),
+      _brakeDeceleration(clone->_brakeDeceleration),
+      _climbRate(clone->_climbRate),
+      _descentRate(clone->_descentRate),
+      _vRotate(clone->_vRotate),
+      _vTakeOff(clone->_vTakeOff),
+      _vClimb(clone->_vClimb),
+      _vCruise(clone->_vCruise),
+      _vDescent(clone->_vDescent),
+      _vApproach(clone->_vApproach),
+      _vTouchdown(clone->_vTouchdown),
+      _vTaxi(clone->_vTaxi),
+      _wingSpan(clone->_wingSpan),
+      _wingChord(clone->_wingChord),
+      _weight(clone->_weight)
 {
     _rollrate = clone->_rollrate;
     _maxbank = clone->_maxbank;

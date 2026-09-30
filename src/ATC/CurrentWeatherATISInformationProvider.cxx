@@ -6,8 +6,9 @@
 
 using std::string;
 
-CurrentWeatherATISInformationProvider::CurrentWeatherATISInformationProvider(const std::string& airportId) : _airportId(airportId),
-                                                                                                             _environment(fgGetNode("/environment"))
+CurrentWeatherATISInformationProvider::CurrentWeatherATISInformationProvider(const std::string& airportId)
+    : _airportId(airportId),
+      _environment(fgGetNode("/environment"))
 {
 }
 

@@ -34,11 +34,12 @@ using std::string;
  * FGTaxiSegment
  **************************************************************************/
 
-FGTaxiSegment::FGTaxiSegment(FGTaxiNode* aStart, FGTaxiNode* aEnd) : startNode(aStart),
-                                                                     endNode(aEnd),
-                                                                     isActive(0),
-                                                                     index(0),
-                                                                     oppositeDirection(0)
+FGTaxiSegment::FGTaxiSegment(FGTaxiNode* aStart, FGTaxiNode* aEnd)
+    : startNode(aStart),
+      endNode(aEnd),
+      isActive(0),
+      index(0),
+      oppositeDirection(0)
 {
     if (!aStart || !aEnd) {
         throw sg_exception("Missing node arguments creating FGTaxiSegment");
@@ -121,10 +122,11 @@ void FGTaxiSegment::unblock(time_t now)
   * @param score The score it achieved. If greater than length then there were penalties.
   */
 
-FGTaxiRoute::FGTaxiRoute(const FGTaxiNodeVector& nds, const intVec& rts, double dist, double score, int /* dpth */) : nodes(nds),
-                                                                                                                      routes(rts),
-                                                                                                                      distance(dist),
-                                                                                                                      score(score)
+FGTaxiRoute::FGTaxiRoute(const FGTaxiNodeVector& nds, const intVec& rts, double dist, double score, int /* dpth */)
+    : nodes(nds),
+      routes(rts),
+      distance(dist),
+      score(score)
 {
     currNode = nodes.begin();
     currRoute = routes.begin();
@@ -167,7 +169,8 @@ bool FGTaxiRoute::next(FGTaxiNodeRef& node, int* rte)
  * FGGroundNetwork()
  **************************************************************************/
 
-FGGroundNetwork::FGGroundNetwork(FGAirport* airport) : parent(airport)
+FGGroundNetwork::FGGroundNetwork(FGAirport* airport)
+    : parent(airport)
 {
     hasNetwork = false;
     version = 0;
@@ -594,7 +597,8 @@ static int edgePenalty(FGTaxiSegment* ts)
 class ShortestPathData
 {
 public:
-    ShortestPathData() : score(HUGE_VAL)
+    ShortestPathData()
+        : score(HUGE_VAL)
     {
     }
 

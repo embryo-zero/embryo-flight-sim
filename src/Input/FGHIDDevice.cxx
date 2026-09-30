@@ -111,8 +111,9 @@ class HIDEventData : public FGEventData
 {
 public:
     // item, value, dt, keyModifiers
-    HIDEventData(FGHIDDevice::Item* it, int value, double dt, int keyMods) : FGEventData(value, dt, keyMods),
-                                                                             item(it)
+    HIDEventData(FGHIDDevice::Item* it, int value, double dt, int keyMods)
+        : FGEventData(value, dt, keyMods),
+          item(it)
     {
         assert(item);
     }
@@ -123,7 +124,8 @@ public:
 ///////////////////////////////////////////////////////////////////////////////
 // FGHIDDevice
 
-FGHIDDevice::FGHIDDevice(hid_device_info* devInfo, FGHIDEventInput*) : FGInputDevice({})
+FGHIDDevice::FGHIDDevice(hid_device_info* devInfo, FGHIDEventInput*)
+    : FGInputDevice({})
 {
     class_id = "FGHIDDevice";
     _hidPath = devInfo->path;
