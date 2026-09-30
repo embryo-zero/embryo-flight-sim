@@ -21,9 +21,6 @@ namespace flightgear
 
 const auto turnComputeDist = SG_NM_TO_METER * 4.0;
 
-// declared in routePath.cxx
-bool geocRadialIntersection(const SGGeoc& a, double r1, const SGGeoc& b, double r2, SGGeoc& result);
-
 /**
  * Helper function Cross track error:
  * http://williams.best.vwh.net/avform.htm#XTE
@@ -759,15 +756,15 @@ public:
         geocPos = SGGeoc::fromGeod(_rnav->position()),
         geocWayptPos = SGGeoc::fromGeod(_waypt->position());
 
-      bool ok = geocRadialIntersection(geocPos, _targetTrack,
-                                       geocWayptPos, _trueRadial, c);
+      bool ok = SGGeodesy::radialIntersection(geocPos, _targetTrack,
+                                              geocWayptPos, _trueRadial, c);
       if (!ok) {
           // try with a backwards offset from the waypt pos, in case the
           // procedure waypt location is too close. (eg, KSFO OCEAN SID)
 
           SGGeoc navidAdjusted = SGGeodesy::advanceDegM(geocWayptPos, _trueRadial, -10 * SG_NM_TO_METER);
-          ok = geocRadialIntersection(geocPos, _targetTrack,
-                                      navidAdjusted, _trueRadial, c);
+          ok = SGGeodesy::radialIntersection(geocPos, _targetTrack,
+                                             navidAdjusted, _trueRadial, c);
           if (!ok) {
               SG_LOG(SG_INSTR, SG_WARN, "InterceptCtl, bad intersection, skipping waypt");
               setDone();

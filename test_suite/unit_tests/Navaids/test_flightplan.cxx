@@ -4,6 +4,7 @@
 #include "config.h"
 
 
+#include "flightplanTestHelpers.hxx"
 #include "test_flightplan.hxx"
 
 #include <algorithm>
@@ -32,6 +33,7 @@
 
 using namespace std::string_literals;
 using namespace flightgear;
+using namespace FGTestApi::flightplan;
 
 static bool static_haveProcedures = false;
 
@@ -824,8 +826,8 @@ void FlightplanTests::testOnlyDiscontinuityRoute()
     RoutePath rp1(f);
 
     // discontinuity should act like a straight segment between preceding and following
-    const double d = SGGeodesy::distanceNm(depApt->geod(), destApt->geod());
-   // CPPUNIT_ASSERT_DOUBLES_EQUAL(rp1.distanceForIndex(0), d, 0.5);
+    //const double d = SGGeodesy::distanceNm(depApt->geod(), destApt->geod());
+    // CPPUNIT_ASSERT_DOUBLES_EQUAL(rp1.distanceForIndex(0), d, 0.5);
 
     // start inserting waypoints ahead of the DISCON, Boeing FPL style
     WayptRef wpt = f->waypointFromString("LMG"s);
@@ -874,6 +876,139 @@ void FlightplanTests::testRadialIntercept()
 
     RoutePath rtepath(f);
     CPPUNIT_ASSERT_DOUBLES_EQUAL(230 + magVarFor(pos), f->legAtIndex(3)->courseDeg(), 1.0);
+}
+
+// every leg of the route has a sane length, and building the path didn't throw
+static void checkRoutePathDistances(FlightPlanRef f, double maxLegNm)
+{
+    RoutePath path(f);
+    for (int i = 0; i < f->numLegs(); ++i) {
+        const double nm = path.distanceForIndex(i) * SG_METER_TO_NM;
+        CPPUNIT_ASSERT_MESSAGE("leg " + std::to_string(i) + " " + f->legAtIndex(i)->waypoint()->ident() +
+                                   " is " + std::to_string(nm) + " NM",
+                               nm < maxLegNm);
+    }
+}
+
+// codespell:ignore-begin FRAMS is a waypoint
+void FlightplanTests::testRadialInterceptFromRadialOrigin()
+{
+    // KSMX BUELT4 departure, runway 30, FRAMS transition (FAA CIFP 2610): after
+    // BUELT, fly heading 280 to intercept the BUELT-GLJ track, i.e. the radial
+    // from the waypoint just reached. The intercept used to be computed tens of
+    // thousands of km away, and the next leg's geodesic threw.
+    FlightPlanRef f = makeTestFP("KSMX"s, "30"s, "KSBA"s, "25"s, ""s);
+    const SGGeod buelt = SGGeod::fromDeg(-120.277197, 34.652511);
+    WayptVec wps = {
+        hdgToAlt(f, "(661)"s, 301.0, 661),
+        new RadialIntercept(f, "GLJR132"s, SGGeod::fromDeg(-120.521481, 34.952375), 190.0, 132.0),
+        fix(f, "BUELT"s, 34.652511, -120.277197),
+        new RadialIntercept(f, "BUELTR312"s, buelt, 280.0, 312.2),
+        fix(f, "GLJ"s, 34.952375, -120.521481),
+        fix(f, "PISMO"s, 35.262556, -121.045747),
+        fix(f, "FRAMS"s, 35.367206, -120.939422)};
+
+    CPPUNIT_ASSERT_NO_THROW(f->insertWayptsAtIndex(wps, 1));
+    checkRoutePathDistances(f, 100.0);
+
+    // already on the radial at its origin: the intercept is immediate
+    RoutePath path(f);
+    const double nm = SGGeodesy::distanceNm(path.positionForIndex(4), buelt);
+    CPPUNIT_ASSERT_MESSAGE("intercept " + std::to_string(nm) + " NM from BUELT", nm < 1.0);
+}
+// codespell:ignore-end
+
+void FlightplanTests::testRadialInterceptNearStation()
+{
+    // KMTJ MTJ2 departure, runway 13 (FAA CIFP 2610): climb on 127, then
+    // heading 340 to intercept MTJ R297, with MTJ beside the runway.
+    FlightPlanRef f = makeTestFP("KMTJ"s, "13"s, "KGJT"s, "11"s, ""s);
+    const SGGeod mtj = SGGeod::fromDeg(-107.899289, 38.506436);
+    auto hold = new Hold(mtj, "MTJ"s, f);
+    hold->setHoldRadial(116.6);
+    hold->setRightHanded();
+    hold->setHoldTime(60.0);
+    WayptVec wps = {
+        hdgToAlt(f, "(6159)"s, 127.0, 6159),
+        new RadialIntercept(f, "MTJR297"s, mtj, 340.0, 297.0),
+        hdgToAlt(f, "(8100)"s, 297.0, 8100),
+        fix(f, "MTJ"s, 38.506436, -107.899289),
+        hold};
+
+    CPPUNIT_ASSERT_NO_THROW(f->insertWayptsAtIndex(wps, 1));
+    checkRoutePathDistances(f, 100.0);
+}
+
+void FlightplanTests::testRadialInterceptMissedFromThreshold()
+{
+    // KAIK ILS07 missed approach (FAA CIFP 2610): from the threshold climb on
+    // 066 to 1100, then heading 276 to intercept the RW07-VIXLY track, the
+    // 246 radial from the threshold behind the aircraft.
+    FlightPlanRef f = makeTestFP("KCAE"s, "29"s, "KAGS"s, "35"s, ""s);
+    const SGGeod rw07 = SGGeod::fromDeg(-81.695781, 33.646072);
+    WayptVec wps = {
+        fix(f, "PEPCI"s, 33.606064, -81.779650),
+        fix(f, "RW07"s, 33.646072, -81.695781),
+        hdgToAlt(f, "(1100)"s, 66.3, 1100),
+        new RadialIntercept(f, "RW07R246"s, rw07, 276.0, 246.3),
+        fix(f, "VIXLY"s, 33.550289, -81.896242)};
+
+    CPPUNIT_ASSERT_NO_THROW(f->insertWayptsAtIndex(wps, 1));
+    checkRoutePathDistances(f, 100.0);
+}
+
+void FlightplanTests::testRadialIntersectionFarCrossing()
+{
+    // KMTJ MTJ2 runway 13, as computed live: the climb ends just south-east of
+    // MTJ, and heading 340 only meets the line of R297 behind the station. The
+    // formula's other crossing is MTJ's antipode, which must not be returned.
+    const SGGeoc climbEnd = SGGeoc::fromRadM(-1.88227719363395, 0.67187008089714351, SG_EQUATORIAL_RADIUS_M);
+    const SGGeoc mtj = SGGeoc::fromGeod(SGGeod::fromDeg(-107.899289, 38.506436));
+    const double mv = magVarFor(SGGeod::fromGeoc(climbEnd));
+
+    SGGeoc result;
+    if (SGGeodesy::radialIntersection(climbEnd, 340.0 + mv, mtj, 297.0 + mv, result)) {
+        const double nm = SGGeodesy::distanceNm(SGGeod::fromGeoc(result), SGGeod::fromGeoc(mtj));
+        CPPUNIT_ASSERT_MESSAGE("intersection " + std::to_string(nm) + " NM from MTJ", nm < 100.0);
+    }
+
+    // starting at the radial's origin: the intercept is immediate
+    CPPUNIT_ASSERT(SGGeodesy::radialIntersection(mtj, 280.0, mtj, 312.0, result));
+    CPPUNIT_ASSERT(SGGeodesy::distanceM(SGGeod::fromGeoc(result), SGGeod::fromGeoc(mtj)) < 1.0);
+}
+
+// Throws from waypointsChanged() the first time only.
+class ThrowingFPDelegate : public FlightPlan::Delegate
+{
+public:
+    void waypointsChanged() override
+    {
+        ++calls;
+        if (calls == 1) {
+            throw sg_exception("test: delegate failure");
+        }
+    }
+
+    int calls = 0;
+};
+
+void FlightplanTests::testDelegateExceptionReleasesLock()
+{
+    // An exception escaping a delegate (or rebuilding the leg data) must not
+    // leave the plan's delegates locked: later changes must still run them.
+    FlightPlanRef f = makeTestFP("EGCC"s, "23L"s, "EHAM"s, "24"s, "TNT"s);
+    auto d = new ThrowingFPDelegate;
+    f->addDelegate(d);
+
+    CPPUNIT_ASSERT_THROW(f->insertWayptAtIndex(fix(f, "ONE"s, 53.0, -1.0), 1), sg_exception);
+    CPPUNIT_ASSERT_EQUAL(1, d->calls);
+
+    f->insertWayptAtIndex(fix(f, "TWO"s, 53.1, -1.1), 1);
+    CPPUNIT_ASSERT_EQUAL(2, d->calls);
+    CPPUNIT_ASSERT_EQUAL(std::string("TWO"), f->legAtIndex(1)->waypoint()->ident());
+
+    f->removeDelegate(d);
+    delete d;
 }
 
 void FlightplanTests::loadFGFPWithoutDepartureArrival()

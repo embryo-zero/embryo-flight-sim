@@ -1895,7 +1895,15 @@ void FlightPlan::unlockDelegates()
         return;
     }
 
-    runDelegates();
+    try {
+        runDelegates();
+    } catch (sg_exception& ex) {
+        // don't leave the delegates locked: every later change would skip them
+        _departureChanged = _arrivalChanged = _waypointsChanged = false;
+        _cruiseDataChanged = _currentWaypointChanged = _didLoadFP = false;
+        --_delegateLock;
+        throw;
+    }
     --_delegateLock;
 }
 
