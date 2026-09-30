@@ -1320,6 +1320,10 @@ MaxEmptyLinesToKeep: 2
 
 # Rationale:  Average FG style with minimal diff.
 NamespaceIndentation: None
+
+# Avoids excessively indented initializer lists (when break is after colon).
+PackConstructorInitializers: Never
+
 # **PenaltyBreakAssignment** (``unsigned``)
 #     The penalty for breaking around an assignment operator.
 
