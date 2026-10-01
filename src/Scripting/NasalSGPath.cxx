@@ -114,7 +114,7 @@ naRef initNasalSGPath(naRef globals, naContext c)
         .method("rename", &SGPath::rename);
 
     nasal::Hash globals_module(globals, c),
-        path = globals_module.createHash("os")
+        path = globals_module.getOrCreateHash("os")
                    .createHash("path");
 
     path.set("new", f_new_path);

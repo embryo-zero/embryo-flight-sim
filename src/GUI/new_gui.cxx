@@ -270,8 +270,8 @@ void NewGUI::postinit()
 
 void NewGUI::registerNasalBindings(FGNasalSys* nas)
 {
-    nasal::Hash guiModule = nas->getGlobals().createHash("gui");
-    nasal::Hash compatModule = guiModule.createHash("xml");
+    nasal::Hash guiModule = nas->getGlobals().getOrCreateHash("gui");
+    nasal::Hash compatModule = guiModule.getOrCreateHash("xml");
 
     FGPUICompatDialog::setupGhost(compatModule);
     PUICompatObject::setupGhost(compatModule);

@@ -646,7 +646,7 @@ void FGNasalMenuBar::setupGhosts(nasal::Hash& compatModule)
     auto nas = globals->get_subsystem<FGNasalSys>();
     nasal::Context nasCtx;
     nasal::Hash guiModule{nas->getModule("gui"), nasCtx};
-    nasal::Hash xmlHash{guiModule.get("xml"), nasCtx};
+    nasal::Hash xmlHash = guiModule.getOrCreateHash("xml");
     nasal::Hash menuHash = xmlHash.createHash("Menu");
 
     menuHash.set("ChildAdded", naNum(static_cast<int>(MenuChangeKind::ChildAdded)));
