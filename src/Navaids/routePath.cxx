@@ -9,6 +9,7 @@
 
 #include <Navaids/routePath.hxx>
 
+#include <simgear/debug/debug_types.h>
 #include <simgear/magvar/magvar.hxx>
 #include <simgear/math/SGGeodesy.hxx>
 #include <simgear/structure/exception.hxx>
@@ -1068,13 +1069,15 @@ double RoutePath::computeDistanceForIndex(int index) const
     return 0.0;
   }
 
-    double dist = SGGeodesy::distanceM(prevIt->turnExitPos, it->turnEntryPos);
-    dist += prevIt->turnDistanceM();
 
-    if (!it->flyOver) {
-        // add entry distance
-        dist += it->turnDistanceM();
-    }
+  SGGeod p = it->hasEntry ? it->turnEntryPos : it->pos;
+  double dist = SGGeodesy::distanceM(prevIt->turnExitPos, p);
+  dist += prevIt->turnDistanceM();
+
+  if (!it->flyOver) {
+      // add entry distance
+      dist += it->turnDistanceM();
+  }
 
     return dist;
 }

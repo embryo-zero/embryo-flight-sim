@@ -100,6 +100,7 @@ public:
 
         // clear anything existing
         _plan->clearWayptsWithFlag(WPT_ARRIVAL);
+        _plan->clearWayptsWithFlag(flightgear::WPT_APPROACH);
 
         if (!_plan->destinationAirport()) {
             return;
@@ -115,7 +116,7 @@ public:
 
         // insert waypt for the destination runway
         auto dr = new RunwayWaypt(_plan->destinationRunway(), _plan);
-        dr->setFlag(WPT_ARRIVAL);
+        dr->setFlag(WPT_APPROACH);
         dr->setFlag(WPT_GENERATED);
         auto leg = _plan->insertWayptAtIndex(dr, -1);
 
@@ -139,7 +140,7 @@ public:
                 throw sg_exception("failed to route approach");
             int insertIndex = leg->index();
             for (auto w : approachRoute) {
-                w->setFlag(WPT_ARRIVAL);
+                w->setFlag(WPT_APPROACH);
                 w->setFlag(WPT_GENERATED);
                 _plan->insertWayptAtIndex(w, insertIndex++);
             }
@@ -1480,4 +1481,46 @@ void FlightplanTests::testRoute()
     CPPUNIT_ASSERT_EQUAL(2, fp1->currentIndex());
     CPPUNIT_ASSERT(!fp1->isActive());
 
+}
+
+void FlightplanTests::testDeleteProcedureWaypoint()
+{
+    static_factory = std::make_shared<TestFPDelegateFactory>();
+    FlightPlan::registerDelegateFactory(static_factory);
+
+    // https://gitlab.com/flightgear/flightgear/-/issues/3128
+
+    auto egkk = FGAirport::findByIdent("EGKK"s);
+    auto sid = egkk->findSIDWithIdent("SAM3P"s);
+    auto eham = FGAirport::findByIdent("EHAM"s);
+    auto redf1A = eham->findSTARWithIdent("REDF1A"s);
+    auto ils06 = eham->findApproachWithIdent("ILS06"s);
+    FlightPlanRef fp1 = makeTestFP("EGKK"s, "08R"s, "EHAM"s, "06"s,
+                                   "CLN COA"s, false);
+    fp1->setSID(sid);
+    fp1->setApproach(ils06, "SUG2A"s);
+    fp1->setSTAR(redf1A);
+
+    fp1->activate();
+
+    auto ourDelegate = TestFPDelegateFactory::delegateForPlan(fp1);
+    CPPUNIT_ASSERT(ourDelegate->sawArrivalChange);
+    CPPUNIT_ASSERT(ourDelegate->sawDepartureChange);
+
+    ourDelegate->sawDepartureChange = false;
+    ourDelegate->sawArrivalChange = false;
+
+    // delete KKS02 from the SID
+    int sidLegIndex = FGTestApi::flightplan::findLegIndexByIdent(fp1, "KKS02"s);
+    CPPUNIT_ASSERT(sidLegIndex >= 0);
+    fp1->deleteIndex(sidLegIndex);
+    CPPUNIT_ASSERT(!ourDelegate->sawDepartureChange);
+    CPPUNIT_ASSERT(!ourDelegate->sawArrivalChange);
+
+    // delete EHA07 from the STAR
+    int starLegIndex = FGTestApi::flightplan::findLegIndexByIdent(fp1, "EHA07"s);
+    CPPUNIT_ASSERT(starLegIndex >= 0);
+    fp1->deleteIndex(starLegIndex);
+    CPPUNIT_ASSERT(!ourDelegate->sawDepartureChange);
+    CPPUNIT_ASSERT(!ourDelegate->sawArrivalChange);
 }

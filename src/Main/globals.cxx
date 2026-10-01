@@ -244,6 +244,8 @@ FGGlobals::~FGGlobals()
 
     fgCancelSnapShot();
 
+    _packageRoot.reset();
+
     delete subsystem_mgr;
     subsystem_mgr = nullptr; // important so ::get_subsystem returns NULL
     set_matlib(NULL);

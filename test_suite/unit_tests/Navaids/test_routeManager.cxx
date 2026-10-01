@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2021 James Turner
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-
 #include "config.h"
 
 #include "test_routeManager.hxx"
@@ -16,6 +15,8 @@
 #include "test_suite/FGTestApi/testGlobals.hxx"
 #include "test_suite/FGTestApi/NavDataCache.hxx"
 #include "test_suite/FGTestApi/TestPilot.hxx"
+
+#include "flightplanTestHelpers.hxx"
 
 #include <Navaids/FlightPlan.hxx>
 #include <Navaids/NavDataCache.hxx>
@@ -32,6 +33,103 @@
 using namespace flightgear;
 using namespace std::string_literals;
 
+
+namespace {
+class TestFPDelegate : public FlightPlan::Delegate
+{
+public:
+    TestFPDelegate(FlightPlan* plan)
+        : _plan(plan)
+    {
+    }
+
+    virtual ~TestFPDelegate()
+    {
+    }
+
+    void sequence() override
+    {
+    }
+
+    void currentWaypointChanged() override
+    {
+    }
+
+    void waypointsChanged() override
+    {
+        sawWaypointsChange = true;
+    }
+
+    void departureChanged() override
+    {
+        sawDepartureChange = true;
+    }
+
+    void arrivalChanged() override
+    {
+        sawArrivalChange = true;
+    }
+
+
+    void loaded() override
+    {
+        didLoad = true;
+    }
+
+    FlightPlan* _plan = nullptr;
+    bool didLoad = false;
+    bool sawDepartureChange = false;
+    bool sawArrivalChange = false;
+    bool sawWaypointsChange = false;
+};
+
+class TestFPDelegateFactory : public FlightPlan::DelegateFactory
+{
+public:
+    TestFPDelegateFactory() = default;
+    virtual ~TestFPDelegateFactory() = default;
+
+    FlightPlan::Delegate* createFlightPlanDelegate(FlightPlan* fp) override
+    {
+        auto d = new TestFPDelegate(fp);
+        _instances.push_back(d);
+        return d;
+    }
+
+    void destroyFlightPlanDelegate(FlightPlan* fp, FlightPlan::Delegate* d) override
+    {
+        auto it = std::find_if(_instances.begin(), _instances.end(), [d](TestFPDelegate* fpd) {
+            return fpd == d;
+        });
+
+        CPPUNIT_ASSERT(it != _instances.end());
+
+        _instances.erase(it);
+        delete d;
+    }
+
+    static TestFPDelegate* delegateForPlan(FlightPlan* fp);
+
+    std::vector<TestFPDelegate*> _instances;
+};
+
+std::shared_ptr<TestFPDelegateFactory> static_factory;
+
+TestFPDelegate* TestFPDelegateFactory::delegateForPlan(FlightPlan* fp)
+{
+    auto it = std::find_if(static_factory->_instances.begin(),
+                           static_factory->_instances.end(),
+                           [fp](TestFPDelegate* del) {
+                               return del->_plan == fp;
+                           });
+
+    if (it == static_factory->_instances.end())
+        return nullptr;
+
+    return *it;
+}
+
+} // namespace
 
 static FlightPlanRef makeTestFP(const std::string& depICAO, const std::string& depRunway,
                          const std::string& destICAO, const std::string& destRunway,
@@ -76,6 +174,12 @@ void RouteManagerTests::setUp()
 void RouteManagerTests::tearDown()
 {
     m_gps = nullptr;
+
+    if (static_factory) {
+        FlightPlan::unregisterDelegateFactory(static_factory);
+        static_factory.reset();
+    }
+
     FGTestApi::tearDown::shutdownTestGlobals();
 }
 
@@ -992,4 +1096,64 @@ void RouteManagerTests::testAppendWaypoint() {
 
     CPPUNIT_ASSERT_EQUAL("NK"s, f->legAtIndex(1)->waypoint()->source()->name());
     CPPUNIT_ASSERT_EQUAL("NK"s, f->legAtIndex(2)->waypoint()->source()->name());
+}
+
+void RouteManagerTests::testEditProcedures()
+{
+    static_factory = std::make_shared<TestFPDelegateFactory>();
+    FlightPlan::registerDelegateFactory(static_factory);
+
+    auto rm = globals->get_subsystem<FGRouteMgr>();
+
+    FlightPlanRef f = FlightPlan::create();
+    rm->setFlightPlan(f);
+
+    auto egkk = FGAirport::findByIdent("EGKK");
+    auto eham = FGAirport::findByIdent("EHAM");
+
+    auto sid = egkk->findSIDWithIdent("SAM3P"s);
+    auto redf1A = eham->findSTARWithIdent("REDF1A"s);
+    auto ils06 = eham->findApproachWithIdent("ILS06"s);
+
+    f->setDeparture(egkk->getRunwayByIdent("08R"));
+    f->setSID(sid);
+
+    f->setDestination(eham->getRunwayByIdent("06"));
+    f->setSTAR(redf1A);
+    f->setApproach(ils06, "SUG2A");
+
+    auto w = f->waypointFromString("CLN");
+    f->insertWayptAtIndex(w, f->indexOfFirstNonDepartureWaypoint());
+
+    auto w2 = f->waypointFromString("COA");
+    f->insertWayptAtIndex(w2, f->indexOfFirstArrivalWaypoint());
+
+    // let's check what we got
+
+    auto endOfSID = f->legAtIndex(f->indexOfFirstNonDepartureWaypoint() - 1);
+    CPPUNIT_ASSERT_EQUAL(endOfSID->waypoint()->ident(), "SAM"s);
+
+    auto startOfSTAR = f->legAtIndex(f->indexOfFirstArrivalWaypoint());
+    CPPUNIT_ASSERT_EQUAL(startOfSTAR->waypoint()->ident(), "REDFA"s);
+
+    auto endOfSTAR = f->legAtIndex(f->indexOfFirstApproachWaypoint() - 1);
+    CPPUNIT_ASSERT_EQUAL(endOfSTAR->waypoint()->ident(), "SUGOL"s);
+
+    auto ourDelegate = TestFPDelegateFactory::delegateForPlan(f);
+    ourDelegate->sawArrivalChange = false;
+    ourDelegate->sawDepartureChange = false;
+
+    // delete KKS02 from the SID
+    int sidLegIndex = FGTestApi::flightplan::findLegIndexByIdent(f, "KKS02"s);
+    CPPUNIT_ASSERT(sidLegIndex >= 0);
+    f->deleteIndex(sidLegIndex);
+    CPPUNIT_ASSERT(!ourDelegate->sawDepartureChange);
+    CPPUNIT_ASSERT(!ourDelegate->sawArrivalChange);
+
+    // delete EHA07 from the STAR
+    int starLegIndex = FGTestApi::flightplan::findLegIndexByIdent(f, "EHA07"s);
+    CPPUNIT_ASSERT(starLegIndex >= 0);
+    f->deleteIndex(starLegIndex);
+    CPPUNIT_ASSERT(!ourDelegate->sawDepartureChange);
+    CPPUNIT_ASSERT(!ourDelegate->sawArrivalChange);
 }

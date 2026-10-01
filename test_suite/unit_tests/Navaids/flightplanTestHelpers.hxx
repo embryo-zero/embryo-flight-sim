@@ -24,5 +24,15 @@ static WayptRef fix(FlightPlan* f, const std::string& ident, double lat, double 
     return new BasicWaypt(SGGeod::fromDeg(lon, lat), ident, f);
 }
 
+static int findLegIndexByIdent(FlightPlanRef fp, const std::string& ident)
+{
+    for (int i = 0; i < fp->numLegs(); ++i) {
+        if (fp->legAtIndex(i)->waypoint()->ident() == ident) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 } // namespace flightplan
 } // namespace FGTestApi
