@@ -70,6 +70,12 @@ naRef f_dialogRootObject(FGPUICompatDialog& dialog, naContext c)
     return nasal::to_nasal(c, dialog._root);
 }
 
+naRef f_dialogWidgetByName(FGPUICompatDialog& dialog, const nasal::CallContext& ctx)
+{
+    const auto nm = ctx.requireArg<std::string>(0);
+    return ctx.to_nasal(dialog.widgetByName(nm));
+}
+
 //----------------------------------------------------------------------------
 
 naRef f_makeDialogPeer(const nasal::CallContext& ctx)
@@ -99,7 +105,8 @@ void FGPUICompatDialog::setupGhost(nasal::Hash& compatModule)
         .member("uiVersion", &FGPUICompatDialog::uiVersion)
         .member("resizeable", f_dialogCanResize)
         .member("root", f_dialogRootObject)
-        .method("close", &FGPUICompatDialog::requestClose);
+        .method("close", &FGPUICompatDialog::requestClose)
+        .method("findWidget", f_dialogWidgetByName);
 
 
     using NasalDialogPeer = nasal::Ghost<SGSharedPtr<DialogPeer>>;
@@ -181,17 +188,34 @@ bool FGPUICompatDialog::init()
         _peer->setDialog(this);
         _peer->callMethod<void>("init", nas->wrappedPropsNode(_props));
 
+        // ensure this object is available on its own module
+        auto dialogModuleHash = nas->getModuleHash(_module, true);
+        dialogModuleHash.set("dialog", SelfRef{this});
+
         SGPropertyNode* nasal = _props->getNode("nasal");
+        std::string readyNasal;
+
         if (nasal && nas) {
             _nasal_close = nasal->getNode("close");
+
             SGPropertyNode* open = nasal->getNode("open");
             if (open) {
                 const auto s = open->getStringValue();
                 nas->createModule(_module.c_str(), _module.c_str(), s.c_str(), s.length(), _props);
             }
+
+            readyNasal = nasal->getStringValue("ready");
         }
         display(_props);
         _peer->callMethod<void>("didBuild");
+
+        // because historically, <open> Nasal was run before display(), it
+        // can't refer to built widgets by ID. So this hook is added to give
+        // a place to run Nasal, once the widget tree is constructed.
+        if (!readyNasal.empty()) {
+            nas->createModule(_module.c_str(), _module.c_str(), readyNasal.c_str(), readyNasal.length(), _props);
+        }
+
     } catch (std::exception& e) {
         SG_LOG(SG_GUI, SG_ALERT, "Failed to build dialog:" << e.what());
 

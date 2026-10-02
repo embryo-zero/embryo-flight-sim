@@ -675,7 +675,7 @@ public:
 
     getOctreeLeafChildren = prepare("SELECT rowid, type FROM positioned WHERE octree_node=?1");
 
-    searchAirports = prepare("SELECT rowid, ident, name FROM positioned WHERE (name LIKE ?1 OR ident LIKE ?1) " AND_TYPED
+    searchAirports = prepare("SELECT rowid, ident, name, type FROM positioned WHERE (name LIKE ?1 OR ident LIKE ?1) " AND_TYPED
                              // prioritize entries with matching ICAO
                              " ORDER BY (ident LIKE ?1) DESC");
     sqlite3_bind_int(searchAirports, 2, FGPositioned::AIRPORT);
@@ -2303,7 +2303,8 @@ size_t NavDataCache::searchAirports(const std::string& query, std::vector<Airpor
         string ident = (char*)sqlite3_column_text(stmt, 1);
         string name = (char*)sqlite3_column_text(stmt, 2);
         const auto id = sqlite3_column_int64(stmt, 0);
-        results.emplace_back(name, ident, id); // AirportDesc{name, icao, id}
+        const auto type = static_cast<FGPositioned::Type>(sqlite3_column_int64(stmt, 3));
+        results.emplace_back(name, ident, id, type); // AirportDesc{name, icao, id, type}
     }
 
     d->reset(stmt);

@@ -9,10 +9,15 @@
 
 #include "Navaids/NavDataCache.hxx"
 #include <Airports/airport.hxx>
+#include <Main/fg_props.hxx>
+#include <Main/globals.hxx>
 
 using namespace std::string_literals;
 
-AirportListModel::AirportListModel() = default;
+AirportListModel::AirportListModel()
+{
+    loadRecentAirports();
+}
 
 void AirportListModel::setSearchTerm(const std::string& search)
 {
@@ -21,6 +26,7 @@ void AirportListModel::setSearchTerm(const std::string& search)
     }
 
     _searchTerm = search;
+    _nearbyRangeNm = 0.0; // clear this
     requery();
 }
 
@@ -31,9 +37,24 @@ void AirportListModel::setQueryHeliports(bool b)
     requery();
 }
 
+void AirportListModel::setNearbyRangeNm(double rangeNm)
+{
+    if (rangeNm == _nearbyRangeNm) {
+        return;
+    }
+
+    _nearbyRangeNm = rangeNm;
+    requery();
+}
+
 void AirportListModel::requery()
 {
     _data.clear();
+
+    if (_nearbyRangeNm > 0.0) {
+        useNearbyAirports();
+        return;
+    }
 
     if (_searchTerm.empty()) {
         useRecentAirports();
@@ -49,6 +70,15 @@ void AirportListModel::requery()
     const auto typeMin = _useHeliports ? FGPositioned::HELIPORT : FGPositioned::AIRPORT;
     const auto typeMax = _useHeliports ? FGPositioned::HELIPORT : FGPositioned::SEAPORT;
     flightgear::NavDataCache::instance()->searchAirports(_searchTerm, _data, typeMin, typeMax);
+    if (!_useHeliports) {
+        // filter out heliports manually, since they are in the middle/
+        // of the range between AIRPORT and SEAPORT
+        auto it = std::remove_if(_data.begin(), _data.end(),
+                                 [](const flightgear::NavDataCache::AirportDesc& ad) {
+                                     return ad.type == FGPositioned::HELIPORT;
+                                 });
+        _data.erase(it, _data.end());
+    }
     didReset();
 }
 
@@ -63,14 +93,59 @@ void AirportListModel::addRecentEntry(const FGAirportRef apt)
     if (_recents.size() > kMaxRecents) {
         _recents.erase(_recents.begin());
     }
+
+    saveRecentAirports();
+}
+
+void AirportListModel::loadRecentAirports()
+{
+    _recentAirportsNode = fgGetNode("sim/gui/recent-airports", true);
+
+    _recents.clear();
+    for (auto n : _recentAirportsNode->getChildren("airport")) {
+        auto apt = FGAirport::findByIdent(n->getStringValue());
+        if (apt) {
+            _recents.push_back(apt);
+        }
+    }
+}
+
+void AirportListModel::saveRecentAirports()
+{
+    _recentAirportsNode->removeChildren("airport");
+    for (auto& apt : _recents) {
+        _recentAirportsNode->addChild("airport")->setStringValue(apt->ident());
+    }
 }
 
 void AirportListModel::useRecentAirports()
 {
     _data.clear();
     for (auto& apt : _recents) {
-        _data.emplace_back(apt->name(), apt->ident(), apt->guid());
+        _data.emplace_back(apt->name(), apt->ident(), apt->guid(), apt->type());
     }
+    didReset();
+}
+
+void AirportListModel::useNearbyAirports()
+{
+    _data.clear();
+
+    FGAirport::TypeRunwayFilter filter; // defaults to airports only
+    if (_useHeliports) {
+        filter.fromTypeString("heliport"s);
+    }
+
+    const SGGeod pos = globals->get_aircraft_position();
+    FGPositionedList apts = FGPositioned::findWithinRange(pos, _nearbyRangeNm, &filter);
+    FGPositioned::sortByRange(apts, pos);
+
+    for (const auto& a : apts) {
+        if (const auto apt = fgpositioned_cast<FGAirport>(a)) {
+            _data.emplace_back(apt->name(), apt->ident(), apt->guid(), apt->type());
+        }
+    }
+
     didReset();
 }
 

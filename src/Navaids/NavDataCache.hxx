@@ -204,13 +204,17 @@ public:
 
 
     struct AirportDesc {
-        AirportDesc(const std::string& name, const std::string& icao, PositionedID id)
-            : name(name), icao(icao), id(id) {
+        AirportDesc(const std::string& name, const std::string& icao, PositionedID id, FGPositioned::Type ty)
+            : name(name),
+              icao(icao),
+              id(id),
+              type(ty) {
               };
 
         std::string name;
         std::string icao;
         PositionedID id; ///< positioned DB row id
+        FGPositioned::Type type;
     };
 
     size_t searchAirports(const std::string& query, std::vector<AirportDesc>& results,
