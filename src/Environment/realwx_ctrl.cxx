@@ -62,9 +62,15 @@ void LiveMetarProperties::update( double dt )
         _timeToLive = 0.0;
         invalidate();
         std::string stationId = getStationId();
-        if( stationId.empty() ) return;
+        if (stationId.empty()) {
+            return;
+        }
+
         SG_LOG(SG_ENVIRONMENT, SG_DEBUG, "LiveMetarProperties::update() for " << getStationId() << ": timeToLive=" << _timeToLive << " pollingTimer=" << _pollingTimer);
-        if( _pollingTimer > 0.0 ) return;
+        if (_pollingTimer > 0.0) {
+            return;
+        }
+
         _metarRequester->requestMetar( this, stationId );
         _pollingTimer = MAX_POLLING_INTERVAL_SECONDS;
     }
@@ -411,30 +417,26 @@ void NoaaMetarRealWxController::requestMetar
             requestHeader("X-TIME") = buf.str();
         }
 
-      virtual void onDone()
-      {
-        if( responseCode() != 200 )
+        void onDone() override
         {
-          SG_LOG
-          (
-            SG_ENVIRONMENT,
-            SG_WARN,
-            "metar download failed:" << url() << ": reason:" << responseReason()
-          );
-          return;
+            if (responseCode() != 200) {
+                SG_LOG(
+                    SG_ENVIRONMENT,
+                    SG_WARN,
+                    "metar download failed:" << url() << ": reason:" << responseReason());
+                _metarDataHandler->handleMetarFailure();
+                return;
+            }
+
+            _metarDataHandler->handleMetarData(
+                simgear::strutils::simplify(responseBody()));
         }
 
-        _metarDataHandler->handleMetarData
-        (
-          simgear::strutils::simplify(responseBody())
-        );
-      }
-
-      virtual void onFail()
-      {
-        SG_LOG(SG_ENVIRONMENT, SG_INFO, "metar download failure");
-        _metarDataHandler->handleMetarFailure();
-      }
+        void onFail() override
+        {
+            SG_LOG(SG_ENVIRONMENT, SG_INFO, "metar download failure");
+            _metarDataHandler->handleMetarFailure();
+        }
 
     private:
       LiveMetarProperties_ptr _metarDataHandler;

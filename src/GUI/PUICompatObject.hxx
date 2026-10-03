@@ -150,6 +150,11 @@ public:
 
     static void shutdownGhost();
 
+    /**
+     * label, translated
+     */
+    std::string label() const;
+
 protected:
     PUICompatObject(naRef impl, const std::string& type);
 

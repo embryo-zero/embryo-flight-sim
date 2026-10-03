@@ -187,6 +187,7 @@ void PUICompatObject::setupGhost(nasal::Hash& compatModule)
         .member("config", &PUICompatObject::config)
         .method("configValue", &PUICompatObject::nasalGetConfigValue)
         .member("value", &PUICompatObject::propertyValue)
+        .member("label", &PUICompatObject::label)
         .member("property", &PUICompatObject::property)
         .member("geometry", &PUICompatObject::geometry)
         .member("x", &PUICompatObject::getX)
@@ -474,10 +475,12 @@ naRef PUICompatObject::nasalGetConfigValue(const nasal::CallContext ctx) const
 
 void PUICompatObject::valueChanged(SGPropertyNode* node)
 {
-    if (node->getNameString() == "label") {
-        _labelChanged = true;
-        _label = node->getStringValue();
-        return;
+    if (node != _value) {
+        if (node->getNameString() == "label") {
+            _labelChanged = true;
+            _label = node->getStringValue();
+            return;
+        }
     }
 
     if (_live == LiveValueMode::OnApply)
@@ -742,4 +745,9 @@ std::string PUICompatObject::translateWithMaybePlural(
     return translUnit->getPluralStatus() ?
         translUnit->getTranslation(cardinalNumber) :
         translUnit->getTranslation();
+}
+
+std::string PUICompatObject::label() const
+{
+    return translateString(_label);
 }
