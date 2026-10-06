@@ -143,17 +143,25 @@ linux-build:
       - $BUILD_DIR/test_suite
   needs:
     - project: flightgear/simgear
-      job: linux-build
+      job: ${CI_JOB_NAME}
       artifacts: true
       ref: $[[ inputs.simgear-ref ]]
     - project: flightgear/openscenegraph
-      job: linux-build
+      job: ${CI_JOB_NAME}
       ref: $[[ inputs.openscenegraph-ref ]]
       artifacts: true
   cache:
     key: linux-amd64-$BRANCH_REF_SLUG
     paths:
       - $CCACHE_DIR
+
+linux-aarch64-build:
+  extends: linux-build
+  tags:
+    - saas-linux-medium-arm64
+  image: ${CI_REGISTRY}/flightgear/flightgear-ci-docker/flightgear-aarch64:latest
+  cache:
+    key: linux-arm64-$BRANCH_REF_SLUG
 
 # disable until we decide what we're doing with minimum distro for this
 # due to Pango/Cairo update (need more recent HarfBuzz)
