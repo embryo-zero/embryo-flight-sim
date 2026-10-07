@@ -1922,7 +1922,7 @@ const std::initializer_list<OptionDesc> fgOptionArray = {
     {"aspect-ratio-multiplier",      ParamType::REGULAR,  OptionType::OPT_DOUBLE,  "/sim/current-view/aspect-ratio-multiplier", false, "", 0 },
     {"shading-flat",                 ParamType::NONE,     OptionType::OPT_BOOL,    "/sim/rendering/shading", false, "", 0 },
     {"shading-smooth",               ParamType::NONE,     OptionType::OPT_BOOL,    "/sim/rendering/shading", true, "", 0 },
-    {"texture-filtering",            ParamType::NONE,     OptionType::OPT_INT,     "/sim/rendering/filtering", 1, "", 0 },
+    {"texture-filtering",            ParamType::REGULAR,  OptionType::OPT_INT,     "/sim/rendering/filtering", 1, "", 0 },
     {"materials-file",               ParamType::REGULAR,  OptionType::OPT_STRING,  "/sim/rendering/materials-file", false, "", 0 },
     {"terrasync-dir",                ParamType::REGULAR,  OptionType::OPT_IGNORE,  "", false, "", 0 },
     {"download-dir",                 ParamType::REGULAR,  OptionType::OPT_IGNORE,  "", false, "", 0 },
