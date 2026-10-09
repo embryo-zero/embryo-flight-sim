@@ -89,6 +89,11 @@ naRef f_dialogCanResize(FGPUICompatDialog& dialog, naContext c)
     return nasal::to_nasal(c, dialog.isFlagSet(FGDialog::WindowFlags::Resizable));
 }
 
+naRef f_dialogPeer(FGPUICompatDialog& dialog, naContext c)
+{
+    return nasal::to_nasal(c, dialog._peer);
+}
+
 void FGPUICompatDialog::setupGhost(nasal::Hash& compatModule)
 {
     using NasalGUIDialog = nasal::Ghost<SGSharedPtr<FGPUICompatDialog>>;
@@ -105,6 +110,7 @@ void FGPUICompatDialog::setupGhost(nasal::Hash& compatModule)
         .member("uiVersion", &FGPUICompatDialog::uiVersion)
         .member("resizeable", f_dialogCanResize)
         .member("root", f_dialogRootObject)
+        .member("_peer", f_dialogPeer)
         .method("close", &FGPUICompatDialog::requestClose)
         .method("findWidget", f_dialogWidgetByName);
 

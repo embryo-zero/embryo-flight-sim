@@ -363,6 +363,7 @@ std::string PUICompatObject::radioGroupIdent() const
         throw std::runtime_error("radioGroupIdent: Not allowed at UI version < 2");
     }
 
+    // FIXME: convert hyphens to underscores
     return _config->getStringValue("radio-group");
 }
 

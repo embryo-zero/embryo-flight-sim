@@ -48,7 +48,7 @@ public:
      * @param translationDomain domain used to fetch translations of dialog
      *                          elements such as labels
      *
-     * The @p translationDomain may be overwridden from @p props.
+     * The @p translationDomain may be overridden from @p props.
      */
     FGPUICompatDialog(SGPropertyNode* props,
                       std::string translationDomain = "core");
@@ -127,8 +127,8 @@ public:
     }
 
     /**
-     * @brief return the UI XML syntax version used by this dialog. 
-     * 
+     * @brief return the UI XML syntax version used by this dialog.
+     *
      * 0 = no version specified explicitly, 1 = compatible with PUI dialogs in older
      * versions of FlightGear. Higher numbers indicate features than only work with the
      * updated XML UI.
@@ -140,7 +140,7 @@ public:
 
     /**
      * @brief find the dialog widget with the specified name, or nullptr.
-     * 
+     *
      */
     PUICompatObjectRef widgetByName(const std::string& name) const;
 
@@ -149,6 +149,7 @@ public:
 private:
     friend naRef f_makeDialogPeer(const nasal::CallContext& ctx);
     friend naRef f_dialogRootObject(FGPUICompatDialog& dialog, naContext c);
+    friend naRef f_dialogPeer(FGPUICompatDialog& dialog, naContext c);
 
     // Show the dialog.
     void display(SGPropertyNode* props);
