@@ -52,22 +52,20 @@ if (APPLE)
     install(DIRECTORY ${OSG_PLUGINS_DIR} DESTINATION $<TARGET_BUNDLE_CONTENT_DIR:fgfs>/PlugIns)
 
     # add extra utilities to the bundle
-    if (TARGET fgjs)
-        install(TARGETS fgjs
-            DESTINATION $<TARGET_BUNDLE_CONTENT_DIR:fgfs>/MacOS
-        )
-    endif()
+    set(bundleUtilTargets)
+    foreach (utilTarget fgcom fgjs fgelev sentry_crashpad::handler)
+        if (TARGET ${utilTarget})
+            list(APPEND bundleUtilTargets ${utilTarget})
+        endif()
+    endforeach()
 
-    install(TARGETS fgcom fgelev
-        DESTINATION $<TARGET_BUNDLE_CONTENT_DIR:fgfs>/MacOS
-    )
+    if (bundleUtilTargets)
+        install(TARGETS ${bundleUtilTargets}
+            DESTINATION $<TARGET_BUNDLE_CONTENT_DIR:fgfs>/MacOS)
+    endif()
 
     if (TARGET sentry::sentry)
         install(FILES $<TARGET_FILE:sentry::sentry> DESTINATION $<TARGET_BUNDLE_CONTENT_DIR:fgfs>/Frameworks)
-    endif()
-
-    if (TARGET sentry_crashpad::handler)
-        install(FILES $<TARGET_FILE:sentry_crashpad::handler> DESTINATION $<TARGET_BUNDLE_CONTENT_DIR:fgfs>/MacOS)
     endif()
 
     if (TARGET DBus::DBus)
@@ -93,6 +91,7 @@ endif()
 if (LINUX)
 
     install(TARGETS fgcom fgjs fgelev fgfs
+        OPTIONAL
         DESTINATION appdir/usr/bin
         COMPONENT packaging EXCLUDE_FROM_ALL)
 

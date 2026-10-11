@@ -187,6 +187,7 @@ option(SYSTEM_GSM        "Set to ON to build IAXClient with the system's GSM lib
 option(SYSTEM_FLITE      "Set to ON to build Flightgear with the system's Flite library" ${SYSTEM_FLITE_DEFAULT})
 option(SYSTEM_HTS_ENGINE "Set to ON to build Flightgear with the system's HTS Engine library" ${SYSTEM_HTS_ENGINE_DEFAULT})
 option(SYSTEM_CPPUNIT    "Set to ON to build Flightgear with the system's CppUnit library" OFF)
+option(SYSTEM_FMTLIB     "Set to ON to build Flightgear with the system's fmt library" OFF)
 
 # additional utilities
 option(ENABLE_FGELEV     "Set to ON to build the fgelev application (default)" ON)
@@ -301,6 +302,24 @@ if (WIN32)
     add_library(nlohmann_json::nlohmann_json ALIAS fg_json)
 else()
     find_package(nlohmann_json 3.10.0 REQUIRED)
+endif()
+
+##############################################################################
+
+
+if (SYSTEM_FMTLIB)
+    message(STATUS "SYSTEM_FMTLIB is set, fmt must be installed locally (eg via deb/rpm)")
+    find_package(fmt REQUIRED)
+else()
+    message(STATUS "Obtaining fmtlib via FetchContent")
+
+    include(FetchContent)
+
+    FetchContent_Declare(
+        fmt
+        GIT_REPOSITORY https://github.com/fmtlib/fmt
+        GIT_TAG        1be298e1bd68957e4cd352e1f676f00e07dcfb57) # 12.2.0
+    FetchContent_MakeAvailable(fmt)
 endif()
 
 ##############################################################################

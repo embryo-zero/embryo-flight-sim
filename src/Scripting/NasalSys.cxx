@@ -81,6 +81,8 @@ using std::map;
 using std::string;
 using std::vector;
 
+using namespace std::string_literals;
+
 void postinitNasalGUI(naRef globals, naContext c);
 
 static FGNasalSys* nasalSys = nullptr;

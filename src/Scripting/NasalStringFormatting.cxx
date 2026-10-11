@@ -8,17 +8,21 @@
  * Synopsis: format(fmt_string, args...)
  */
 
-#include <format>
+
 #include <locale>
 #include <string>
 #include <string_view>
 #include <utility>
+
+// we use fmtlib, not C++20 std::format
+#include <fmt/format.h>
 
 #include <simgear/nasal/cppbind/NasalCallContext.hxx>
 
 #include <Main/globals.hxx>
 
 #include "NasalStringFormatting.hxx"
+#include "NasalSys.hxx"
 
 using std::string;
 using std::string_view;
@@ -36,17 +40,10 @@ struct ReadFieldResult {
 };
 
 struct ParsedFormatSpec {
-    ParsedFormatSpec()
-        : localeSpecificFormatting(false),
-          typeSpecifier('s'),
-          endIndex(0)
-    {
-    }
-
     std::string formatSpec;
-    bool localeSpecificFormatting; // true if the 'L' specifier is in formatSpec
-    char typeSpecifier;            // either implicit or at the end of formatSpec
-    string::size_type endIndex;    // points to “after the closing brace”
+    bool localeSpecificFormatting = false; // true if the 'L' specifier is in formatSpec
+    char typeSpecifier = 's';              // either implicit or at the end of formatSpec
+    string::size_type endIndex = 0;        // points to “after the closing brace”
 };
 
 static ReadFieldResult readField(
@@ -186,11 +183,11 @@ template <class T>
 static string formatOneArg(const ParsedFormatSpec& spec, const T& argument)
 {
     return spec.localeSpecificFormatting
-               ? std::vformat(std::locale(""), // initialized from the environment
+               ? fmt::vformat(std::locale(""), // initialized from the environment
                               "{:" + spec.formatSpec + "}",
-                              std::make_format_args(argument))
-               : std::vformat("{:" + spec.formatSpec + "}",
-                              std::make_format_args(argument));
+                              fmt::make_format_args(argument))
+               : fmt::vformat("{:" + spec.formatSpec + "}",
+                              fmt::make_format_args(argument));
 }
 
 static ReadFieldResult readField(
