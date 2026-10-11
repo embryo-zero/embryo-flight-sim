@@ -205,12 +205,11 @@ private:
 
     void loadNativeModule(const std::string& moduleName);
 
-    void loadPropertyScripts();
-    void loadPropertyScripts(SGPropertyNode* n);
-    void loadNasalScripts();
-    void loadScriptDirectory(std::vector<simgear::ResourceManager::FoundFile> scripts,
-                             SGPropertyNode* loadorder,
-                             bool excludeUnspecifiedInLoadOrder);
+    void loadAllPropertyScripts(bool core);
+    bool loadPropertyScripts(SGPropertyNode* n);
+    bool loadModuleFile(SGPropertyNode* moduleNode, SGPropertyNode* fileNode);
+    bool checkSyntax(const SGPath& file);
+    void registerNasalModules();
     void addModule(std::string moduleName, simgear::PathList scripts);
     static void logError(naContext);
     naRef parse(naContext ctx, const char* filename, const char* buf, int len,

@@ -51,6 +51,26 @@ bool global_FGLocaleInitialized = false;
 
 namespace setUp {
 
+namespace {
+
+// The test globals don't load defaults.xml, but the Nasal modules (and the
+// order they load in) are defined there, under /nasal.
+void loadNasalModuleDefaults()
+{
+    auto props = globals->get_props();
+    if (props->getNode("nasal/props")) {
+        return;
+    }
+
+    SGPropertyNode_ptr defaults(new SGPropertyNode);
+    readProperties(globals->get_fg_root() / "defaults.xml", defaults);
+    if (auto nasalDefaults = defaults->getNode("nasal")) {
+        copyProperties(nasalDefaults, props->getNode("nasal", true));
+    }
+}
+
+} // namespace
+
 void initTestGlobals(const std::string& testName, const std::string& language,
                      bool initFGLocale)
 {
@@ -78,9 +98,7 @@ void initTestGlobals(const std::string& testName, const std::string& language,
 
     fgSetDefaults();
 
-    // load Nasal load priority, which is needed for 'full' NasalSys init
-    auto nasalLoadPriority = globals->get_props()->getNode("/sim/nasal-load-priority", true);
-    readProperties(globals->get_fg_root() / "Nasal/loadpriority.xml", nasalLoadPriority);
+    loadNasalModuleDefaults(); // needed for 'full' NasalSys init
 
     auto t = globals->get_subsystem_mgr()->add<TimeManager>();
     t->bind();
@@ -167,12 +185,9 @@ void initStandardNasal(bool withCanvas)
 
     auto nasalNode = globals->get_props()->getNode("nasal", true);
 
-// load loadpriority.xml, for default modules load order
+    loadNasalModuleDefaults();
 
-    auto nasalLoadPriority = globals->get_props()->getNode("/sim/nasal-load-priority",true);
-    readProperties(globals->get_fg_root() / "Nasal/loadpriority.xml", nasalLoadPriority);
-
-// set various props to reduce Nasal errors
+    // set various props to reduce Nasal errors
     auto props = globals->get_props();
     props->setStringValue("sim/flight-model", "null");
     props->setStringValue("sim/aircraft", "test-suite-aircraft");
@@ -189,7 +204,6 @@ void initStandardNasal(bool withCanvas)
     nasalNode->setBoolValue("jetways/enabled", false);
     nasalNode->setBoolValue("jetways_edit/enabled", false);
     nasalNode->setBoolValue("local_weather/enabled", false);
-    nasalNode->setBoolValue("gui/enabled", withCanvas);
 
     // Nasal needs the interpolator running
     globals->get_subsystem_mgr()->add<FGInterpolator>();

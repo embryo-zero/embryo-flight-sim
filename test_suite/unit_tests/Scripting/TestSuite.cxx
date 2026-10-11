@@ -4,6 +4,7 @@
 #include "benchmarkPropsAccess.hxx"
 #include "testGC.hxx"
 #include "testNasalLib.hxx"
+#include "testNasalReload.hxx"
 #include "testNasalSys.hxx"
 #include "testVector.hxx"
 
@@ -13,3 +14,4 @@ CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(NasalGCTests, "Unit tests");
 CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(NasalLibTests, "Unit tests");
 CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(BenchmarkPropsAccess, "Unit tests");
 CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(VectorTests, "Unit tests");
+CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(NasalReloadTests, "Unit tests");
