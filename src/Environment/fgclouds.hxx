@@ -8,7 +8,9 @@
 #pragma once
 
 #include <map>
+#include <osg/Group>
 #include <osg/Image>
+#include <osg/NodeCallback>
 #include <string>
 #include <vector>
 
@@ -73,6 +75,7 @@ private:
         SGVec3d centerCart;
     };
 
+public:
     // Snapshot needed to (re)build just the shade texture, independently of
     // the rest of the voxel field.  This is cheap enough to redo whenever the
     // sun direction has moved significantly, without re-running the full
@@ -97,6 +100,7 @@ private:
         osg::ref_ptr<osg::Image> voxelShadeData;
     };
 
+private:
     // Protects _cloudPlacementMap from concurrent access between
     // addCloud/removeCloud (main thread) and snapshot capture.
     mutable std::mutex _placementMutex;
@@ -217,7 +221,6 @@ private:
     // cloud placement/voxel field rebuild above, so it can be re-run whenever
     // the sun direction changes significantly without rebuilding everything.
     ShadeSnapshot captureShadeSnapshot();
-    static ShadeRebuildResult runShadeRebuild(ShadeSnapshot snap); // static = no 'this' access
     void commitShadeResult(ShadeRebuildResult result);
 
 public:
@@ -242,6 +245,9 @@ public:
     void updateRepeatingField();
     void updateNonRepeatingField();
     osg::ref_ptr<osg::Group> getCloudUpdateNode() { return _cloudUpdateNode; }
+    static ShadeRebuildResult runShadeRebuild(ShadeSnapshot snap); // static = no 'this' access
+    static void computeColumnShadeChannels(const float* voxelRaw, float* shadeRaw,
+                                           int width, int height, float voxelOpticalDepth);
 };
 
 class FGCloudUpdateCallback : public osg::NodeCallback

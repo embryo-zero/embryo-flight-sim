@@ -10,6 +10,7 @@
 #include "fgclouds.hxx"
 
 #include <Main/fg_props.hxx>
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
@@ -849,8 +850,7 @@ FGClouds::RebuildResult FGClouds::runRebuild(RebuildSnapshot snap)
         generateSDF(result.roughVoxelData, snap.sdfMaxDistanceVoxels);
     }
 
-    SG_LOG(SG_ENVIRONMENT, SG_INFO, "Cloud voxel field rebuild took " << (SGTimeStamp::now() - t_start).toMSecs() << "ms"
-                                                                      << " (repeating=" << snap.fieldRepeating << ")");
+    SG_LOG(SG_ENVIRONMENT, SG_INFO, "Cloud voxel field rebuild took " << (SGTimeStamp::now() - t_start).toMSecs() << "ms" << " (repeating=" << snap.fieldRepeating << ")");
 
     return result;
 }
@@ -937,31 +937,123 @@ FGClouds::ShadeRebuildResult FGClouds::runShadeRebuild(ShadeSnapshot snap)
 
                 const int idx = (k * snap.width * snap.width + j * snap.width + i) * 4;
                 shadeRaw[idx + 0] = sunOpticalDepth;
-                shadeRaw[idx + 1] = 0.0f; // filled by vertical pass below
-                shadeRaw[idx + 2] = 0.0f;
-                shadeRaw[idx + 3] = 0.0f;
             }
         }
     }
 
-    // --- VERTICAL SKY DENSITY (top-down, independent of sun) ---
-    for (int k = snap.height - 1; k >= 0; --k) {
-        for (int j = 0; j < snap.width; ++j) {
-            for (int i = 0; i < snap.width; ++i) {
-                const int idx = (k * snap.width * snap.width + j * snap.width + i) * 4;
-                float density = voxelRaw[idx + 2];
-
-                float verticalOpticalDepth = 0.0f;
-                if (k < snap.height - 1) {
-                    verticalOpticalDepth = shadeRaw[((k + 1) * snap.width * snap.width + j * snap.width + i) * 4 + 1];
-                }
-                verticalOpticalDepth += density * snap.voxelOpticalDepth;
-                shadeRaw[idx + 1] = verticalOpticalDepth;
-            }
-        }
-    }
+    computeColumnShadeChannels(voxelRaw, shadeRaw, snap.width, snap.height, snap.voxelOpticalDepth);
 
     return result;
+}
+
+// Fill the sun-independent, per-column channels of the shade texture from the
+// detailed voxel field.  Both buffers are RGBA float, width x width x height,
+// indexed ((k * width + j) * width + i) * 4; the voxel field's density is its B
+// channel, and a voxel with density > 0 counts as cloud.  Writes:
+//   G - sky optical depth: from the top of the field down to and including
+//       this voxel.
+//   B - ground optical depth: from the bottom of the field up to the centre of
+//       this voxel (all voxels below, plus half of this one).
+//   A - height within cloud: 0 at the base to 1 at the top of the contiguous
+//       vertical run of cloud this voxel belongs to.  Air voxels hold the value
+//       of any horizontally adjacent cloud voxels (averaged), otherwise 1 if the
+//       nearest cloud in their column is below them and 0 if it is above, so
+//       that trilinear filtering at a cloud's surface does not blend towards an
+//       unrelated value.
+// The R (sun optical depth) channel is left untouched.
+void FGClouds::computeColumnShadeChannels(const float* voxelRaw, float* shadeRaw,
+                                          int width, int height, float voxelOpticalDepth)
+{
+    auto index = [width](int i, int j, int k) -> size_t {
+        return (((size_t)k * width + j) * width + i) * 4;
+    };
+
+    auto density = [&](int i, int j, int k) {
+        return voxelRaw[index(i, j, k) + 2];
+    };
+
+    auto isCloud = [&](int i, int j, int k) {
+        return density(i, j, k) > 0.0f;
+    };
+
+    // Per-column distance (in voxels) to the nearest cloud voxel below and above
+    // each voxel, used to classify air voxels for the height-within-cloud channel.
+    std::vector<int> cloudBelowDist(height), cloudAboveDist(height);
+    const int noCloud = height + 1;
+
+    for (int j = 0; j < width; ++j) {
+        for (int i = 0; i < width; ++i) {
+            // G - sky optical depth, top-down, including this voxel
+            float above = 0.0f;
+            for (int k = height - 1; k >= 0; --k) {
+                above += density(i, j, k) * voxelOpticalDepth;
+                shadeRaw[index(i, j, k) + 1] = above;
+            }
+
+            // B - ground optical depth, bottom-up, to the centre of this voxel
+            float below = 0.0f;
+            for (int k = 0; k < height; ++k) {
+                const float d = density(i, j, k) * voxelOpticalDepth;
+                shadeRaw[index(i, j, k) + 2] = below + 0.5f * d;
+                below += d;
+            }
+
+            // A - height within each contiguous vertical run of cloud
+            int k = 0;
+            while (k < height) {
+                if (!isCloud(i, j, k)) {
+                    ++k;
+                    continue;
+                }
+                const int runStart = k;
+                while (k < height && isCloud(i, j, k)) ++k;
+                const float runLength = float(k - runStart);
+                for (int kk = runStart; kk < k; ++kk) {
+                    shadeRaw[index(i, j, kk) + 3] = (float(kk - runStart) + 0.5f) / runLength;
+                }
+            }
+
+            // A - air voxels take the side of the nearest cloud in the column
+            int dist = noCloud;
+            for (int k = 0; k < height; ++k) {
+                dist = isCloud(i, j, k) ? 0 : std::min(dist + 1, noCloud);
+                cloudBelowDist[k] = dist;
+            }
+            dist = noCloud;
+            for (int k = height - 1; k >= 0; --k) {
+                dist = isCloud(i, j, k) ? 0 : std::min(dist + 1, noCloud);
+                cloudAboveDist[k] = dist;
+            }
+            for (int k = 0; k < height; ++k) {
+                if (isCloud(i, j, k)) continue;
+                const bool haveCloud = cloudBelowDist[k] < noCloud || cloudAboveDist[k] < noCloud;
+                shadeRaw[index(i, j, k) + 3] = (haveCloud && cloudBelowDist[k] <= cloudAboveDist[k]) ? 1.0f : 0.0f;
+            }
+        }
+    }
+
+    // A - air voxels beside a cloud take the average of their horizontally adjacent
+    // cloud voxels, so filtering across a cloud's sides keeps its height profile.
+    // Only cloud voxels are read and only air voxels written, so this is safe in place.
+    for (int k = 0; k < height; ++k) {
+        for (int j = 0; j < width; ++j) {
+            for (int i = 0; i < width; ++i) {
+                if (isCloud(i, j, k)) continue;
+                float sum = 0.0f;
+                int count = 0;
+                for (int dj = -1; dj <= 1; ++dj) {
+                    for (int di = -1; di <= 1; ++di) {
+                        const int ni = i + di, nj = j + dj;
+                        if (ni < 0 || ni >= width || nj < 0 || nj >= width) continue;
+                        if (!isCloud(ni, nj, k)) continue;
+                        sum += shadeRaw[index(ni, nj, k) + 3];
+                        ++count;
+                    }
+                }
+                if (count > 0) shadeRaw[index(i, j, k) + 3] = sum / float(count);
+            }
+        }
+    }
 }
 
 void FGClouds::commitResult(RebuildResult result)
