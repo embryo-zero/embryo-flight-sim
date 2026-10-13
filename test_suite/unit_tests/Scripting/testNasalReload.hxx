@@ -11,9 +11,11 @@ class NasalReloadTests : public CppUnit::TestFixture
 {
     CPPUNIT_TEST_SUITE(NasalReloadTests);
     CPPUNIT_TEST(testModulesRegistered);
+    CPPUNIT_TEST(testListedAndScannedFiles);
     CPPUNIT_TEST(testReloadDirectoryModule);
     CPPUNIT_TEST(testReloadTopLevelModule);
     CPPUNIT_TEST(testReloadUnknownModule);
+    CPPUNIT_TEST(testOverlayModules);
     CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -21,7 +23,9 @@ public:
     void tearDown();
 
     void testModulesRegistered();
+    void testListedAndScannedFiles();
     void testReloadDirectoryModule();
     void testReloadTopLevelModule();
     void testReloadUnknownModule();
+    void testOverlayModules();
 };

@@ -27,7 +27,7 @@ class FGNasalModelData;
 class TimerObj;
 class NasalSysPrivate;
 struct NasalTimer;
-class FGNasalModuleListener;
+class NasalModule;
 
 namespace simgear { class BufferedLogCallback; }
 
@@ -181,6 +181,10 @@ public:
 
     bool reloadModuleFromFile(const std::string& moduleName);
 
+    // The module registered under /nasal with this name, or null
+    NasalModule* module(const std::string& moduleName) const;
+
+
     /**
      * @brief Compile a Nasal source string into a cached, callable NasalCode object.
      *
@@ -199,18 +203,19 @@ public:
     // private methods: the class has a lot of friends to allow particular classes
     // to do book-keeping, this is not ideal.
 private:
-    friend FGNasalModuleListener;
+    friend NasalModule;
 
     void initLogLevelConstants();
 
-    void loadNativeModule(const std::string& moduleName);
-
-    void loadAllPropertyScripts(bool core);
-    bool loadPropertyScripts(SGPropertyNode* n);
-    bool loadModuleFile(SGPropertyNode* moduleNode, SGPropertyNode* fileNode);
     bool checkSyntax(const SGPath& file);
     void registerNasalModules();
-    void addModule(std::string moduleName, simgear::PathList scripts);
+
+    // The module for a Nasal namespace, created if need be. By default a new
+    // module is a runtime one, with no files or property node; if
+    // 'registered' it gets a /nasal node and is added to the load order.
+    // 'created' is set to whether a module was created.
+    NasalModule* moduleNamed(const std::string& moduleName, bool registered = false,
+                             bool* created = nullptr) const;
     static void logError(naContext);
     naRef parse(naContext ctx, const char* filename, const char* buf, int len,
                 std::string& errors, int lineOffset = 1);

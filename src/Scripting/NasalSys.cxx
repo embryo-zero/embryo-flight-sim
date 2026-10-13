@@ -92,39 +92,6 @@ static FGNasalSys* nasalSys = nullptr;
 bool global_nasalMinimalInit = false;
 
 
-// Listener class for loading Nasal modules on demand
-class FGNasalModuleListener : public SGPropertyChangeListener
-{
-public:
-    FGNasalModuleListener(SGPropertyNode* node);
-
-    virtual void valueChanged(SGPropertyNode* node);
-
-private:
-    SGPropertyNode_ptr _node;
-};
-
-FGNasalModuleListener::FGNasalModuleListener(SGPropertyNode* node) : _node(node)
-{
-}
-
-void FGNasalModuleListener::valueChanged(SGPropertyNode*)
-{
-    const auto enabled = _node->getBoolValue("enabled", false);
-    const auto loaded = _node->getBoolValue("loaded", true);
-    if (enabled && !loaded) {
-        nasalSys->loadPropertyScripts(_node);
-    } else if (!enabled && loaded) {
-        // delete the module
-        std::string module = _node->getNameString();
-        if (_node->hasChild("module")) {
-            module = _node->getStringValue("module");
-        }
-
-        nasalSys->deleteModule(module.c_str());
-    }
-}
-
 //////////////////////////////////////////////////////////////////////////
 
 class TimerObj : public SGReferenced
@@ -283,8 +250,34 @@ typedef nasal::Ghost<TimeStampObjRef> NasalTimeStampObj;
 
 ///////////////////////////////////////////////////////////////////////////
 
-NasalSysPrivate::~NasalSysPrivate()
+NasalSysPrivate::~NasalSysPrivate() = default;
+
+NasalModule* NasalSysPrivate::findModule(const std::string& name) const
 {
+    auto it = std::find_if(_modules.begin(), _modules.end(),
+                           [&name](const auto& m) { return m->name() == name; });
+    if (it != _modules.end()) {
+        return it->get();
+    }
+
+    auto dyn = _dynamicModules.find(name);
+    return dyn == _dynamicModules.end() ? nullptr : dyn->second.get();
+}
+
+std::vector<NasalModule*> NasalSysPrivate::findModules(const std::string& name) const
+{
+    std::vector<NasalModule*> result;
+    for (const auto& m : _modules) {
+        if (m->name() == name) {
+            result.push_back(m.get());
+        }
+    }
+
+    auto dyn = _dynamicModules.find(name);
+    if (dyn != _dynamicModules.end()) {
+        result.push_back(dyn->second.get());
+    }
+    return result;
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -1164,7 +1157,7 @@ void FGNasalSys::init()
         return;
     }
 
-    if (!fgGetBool("/nasal/props/core")) {
+    if (!fgGetNode("/nasal/builtin-props")) {
         SG_LOG(SG_NASAL, SG_DEV_ALERT, "Nasal core modules not defined in defaults.xml, Nasal loading will fail");
     }
 
@@ -1172,12 +1165,12 @@ void FGNasalSys::init()
     flightgear::addons::initAddonClassesForNasal(d->_globals, d->_context);
 
     // Register every module in the Nasal directories (top-level .nas files, and
-    // subdirectories) under /nasal, in the property tree. The scripts are
-    // then loaded in the order of the modules there: the core modules first,
-    // then the rest.
+    // subdirectories). The scripts are then loaded in the order of the modules
+    // under /nasal.
     registerNasalModules();
-    loadAllPropertyScripts(true);
-    loadAllPropertyScripts(false);
+    for (const auto& m : d->_modules) {
+        m->load();
+    }
 
     // set signal and remove node to avoid restoring at reinit
     const char *s = "nasal-dir-initialized";
@@ -1186,9 +1179,6 @@ void FGNasalSys::init()
     signal->removeChildren(s);
 
     // now Nasal modules are loaded, we can do some delayed work
-    postinitNasalPositioned(d->_globals, d->_context);
-    postinitNasalGUI(d->_globals, d->_context);
-
     d->_inited = true;
 }
 
@@ -1212,9 +1202,8 @@ void FGNasalSys::shutdown()
     }
     d->_commands.clear();
 
-    for (auto ml : d->_moduleListeners)
-        delete ml;
-    d->_moduleListeners.clear();
+    d->_modules.clear();
+    d->_dynamicModules.clear();
 
     for (auto t : d->_nasalTimers) {
         delete t;
@@ -1306,52 +1295,23 @@ bool pathSortPredicate(const SGPath& p1, const SGPath& p2)
   return p1.file() < p2.file();
 }
 
-namespace {
-
-// Resolve the path stored in a module's <file> node
-SGPath resolveModuleFilePath(const std::string& file)
-{
-    SGPath p(file);
-    if (!p.isAbsolute() || !p.exists()) {
-        p = globals->resolve_maybe_aircraft_path(file);
-    }
-    return p;
-}
-
-// The Nasal module name for a module node under /nasal
-std::string moduleNameForNode(SGPropertyNode* n)
-{
-    return n->hasChild("module") ? n->getStringValue("module") : n->getNameString();
-}
-
-// Add a file to a module node, unless it is already present. Returns the
-// <file> node. Modules are allowed to be comprised of several files.
-SGPropertyNode* addModuleFile(SGPropertyNode* moduleNode, const SGPath& path)
-{
-    const auto utf8 = path.utf8Str();
-    const auto existing = moduleNode->getChildren("file");
-    for (const auto& f : existing) {
-        if (f->getStringValue() == utf8) {
-            return f;
-        }
-    }
-
-    SGPropertyNode* fileNode = moduleNode->getChild("file", static_cast<int>(existing.size()), true);
-    fileNode->setStringValue(utf8);
-    return fileNode;
-}
-
-} // namespace
-
 // Register the modules found in the Nasal directories under /nasal.
 //
-// Modules implemented by a subdirectory are registered first (usually, they
-// have an entry in defaults.xml already, setting whether they are enabled);
-// then top-level .nas files, each of which is a module. The order of the
-// modules in /nasal is the order they are loaded in, see loadAllPropertyScripts.
+// A module is created for each node already under /nasal, in order: these come
+// from defaults.xml, which also gives the load order, and from aircraft and
+// add-ons. A node with <file> entries naming files in FG_ROOT/Nasal (relative to
+// it) loads exactly those; an entry ending in '/' means all the files of that
+// directory. Other files found in the
+// Nasal directories are added to the module of the same name, creating it
+// if necessary: subdirectories are modules (disabled unless defaults.xml says
+// otherwise), and each top-level .nas file is a module.
 void FGNasalSys::registerNasalModules()
 {
     using RM = simgear::ResourceManager;
+    d->_modules.clear();
+    // modules created before now have no files to register; they are found again by name
+    d->_dynamicModules.clear();
+
     auto all = RM::instance()->findAllOfType(RM::FileType::NasalScript);
 
     // Deduplicate by relPath, keeping first (highest-priority) occurrence
@@ -1362,140 +1322,98 @@ void FGNasalSys::registerNasalModules()
     for (auto& f : all)
         if (seen.insert(f.relPath).second) deduped.push_back(f);
 
-    // Partition into top-level scripts and module subdirectory scripts
+    SGPropertyNode* nasal = globals->get_props()->getNode("nasal", true);
+
+    // the modules defined by defaults.xml, aircraft and add-ons. The files of
+    // a module are listed explicitly, so we skip those in the directories.
+    std::set<std::string> claimed;
+    for (int i = 0; i < nasal->nChildren(); i++) {
+        auto module = NasalModule::fromProperties(this, nasal->getChild(i), deduped);
+        if (module->hasListedFiles()) {
+            claimed.insert(module->name());
+        }
+        d->_modules.push_back(std::move(module));
+    }
+
+    // Everything else in the Nasal directories: partition into top-level scripts
+    // and module subdirectory scripts. Note in the future this search will
+    // probably include Aircraft locations and other Data providers
     std::vector<RM::FoundFile> topLevel;
-    std::map<std::string, simgear::PathList> modules;
+    std::map<std::string, simgear::PathList> dirModules;
     for (const auto& f : deduped) {
         const auto slash = f.relPath.find('/');
         if (slash == std::string::npos) {
             topLevel.push_back(f);
         } else {
-            modules[f.relPath.substr(0, slash)].push_back(f.path);
+            dirModules[f.relPath.substr(0, slash)].push_back(f.path);
         }
     }
 
-    SGPropertyNode* nasal = globals->get_props()->getNode("nasal", true);
-
-    for (auto& [moduleName, scripts] : modules) {
-        SGPropertyNode* moduleNode = nasal->getChild(moduleName, 0);
-        if (moduleNode && moduleNode->getBoolValue("explicit-files")) {
-            // defaults.xml lists the files to load, and we skip the others.
-            // Paths there are relative to the Nasal directory.
-            for (const auto& f : moduleNode->getChildren("file")) {
-                const std::string relPath = f->getStringValue();
-                auto it = std::find_if(deduped.begin(), deduped.end(),
-                                       [&relPath](const RM::FoundFile& ff) { return ff.relPath == relPath; });
-                if (it != deduped.end()) {
-                    f->setStringValue(it->path.utf8Str());
-                } else {
-                    SG_LOG(SG_NASAL, SG_DEV_ALERT, "Nasal module " << moduleName << ": file listed in defaults.xml not found: " << relPath);
-                }
-            }
+    // directory-style paths
+    for (auto& [name, scripts] : dirModules) {
+        if (claimed.count(name)) {
             continue;
         }
 
-        addModule(moduleName, scripts);
+        auto module = moduleNamed(name, true);
+        for (const auto& script : scripts) {
+            module->addFile(script);
+        }
+
+        if (module->setEnabledByDefault(false)) {
+#ifndef BUILDING_TESTSUITE
+            SG_LOG(SG_NASAL, SG_ALERT, "Nasal module " << name << " present in FGDATA/Nasal but not configured in defaults.xml. "
+                                                       << " Please add an entry to defaults.xml, and set " << module->node()->getPath() << "/enabled"
+                                                       << "=true to load the module on-demand at runtime when required.");
+#endif
+        }
     }
 
-    // In GUI startup mode, we restrict to the core modules deliberately
+    // In GUI startup mode, we restrict to the modules listing their own files deliberately
     const bool coreOnly = fgGetBool("/sim/gui/startup");
 
+    // top-level file paths
     for (const auto& f : topLevel) {
-        const std::string moduleName = f.path.file_base();
+        const std::string name = f.path.file_base();
 
         // unit tests, run via the nasal-test command
-        if (simgear::strutils::starts_with(moduleName, "test_")) {
+        if (simgear::strutils::starts_with(name, "test_") || claimed.count(name) || coreOnly) {
             continue;
         }
 
-        SGPropertyNode* moduleNode = nasal->getChild(moduleName, 0);
-        if (coreOnly && (!moduleNode || !moduleNode->getBoolValue("core"))) {
-            continue;
-        }
-
-        if (!moduleNode) {
-            moduleNode = nasal->getChild(moduleName, 0, true);
+        bool created = false;
+        auto module = moduleNamed(name, true, &created);
+        if (created) {
             // the order of modules matters, so they should all be listed
-            SG_LOG(SG_NASAL, SG_DEV_ALERT, "Nasal module " << moduleName << " present in FGDATA/Nasal but not listed in defaults.xml");
+            SG_LOG(SG_NASAL, SG_DEV_ALERT, "Nasal module " << name << " present in FGDATA/Nasal but not listed in defaults.xml");
         }
-
-        addModuleFile(moduleNode, f.path);
+        module->addFile(f.path);
 
         // a top-level module needs no defaults.xml entry, and is enabled
-        if (!moduleNode->hasChild("enabled")) {
-            SGPropertyNode* enabled = moduleNode->getChild("enabled", 0, true);
-            enabled->setBoolValue(true);
-            enabled->setAttribute(SGPropertyNode::USERARCHIVE, false);
-        }
+        module->setEnabledByDefault(true);
+    }
+
+    // the C++ parts of hybrid modules
+    if (auto m = d->findModule("gui")) {
+        m->setNativeHooks([this]() { NewGUI::registerNasalBindings(this); },
+                          []() { NewGUI::shutdownNasalBindings(); });
+        m->setPostLoadHook([this]() { postinitNasalGUI(d->_globals, d->_context); });
+    }
+    if (auto m = d->findModule("geo")) {
+        m->setPostLoadHook([this]() { postinitNasalPositioned(d->_globals, d->_context); });
+    }
+    if (auto m = d->findModule("canvas")) {
+        m->setNativeHooks([this]() { initNasalCanvas(d->_globals, d->_context); });
+    }
+
+    for (const auto& m : d->_modules) {
+        m->watchEnabled();
     }
 }
 
-// Create module with list of scripts. If the module already exists, the
-// scripts are added to those it already has.
-void FGNasalSys::addModule(string moduleName, simgear::PathList scripts)
+NasalModule* FGNasalSys::module(const std::string& name) const
 {
-    if (! scripts.empty())
-    {
-        SGPropertyNode* nasal = globals->get_props()->getNode("nasal", true);
-        SGPropertyNode* module_node = nasal->getChild(moduleName,0,true);
-        for (const auto& script : scripts) {
-            addModuleFile(module_node, script);
-        }
-        if (!module_node->hasChild("enabled",0))
-        {
-            SGPropertyNode* node = module_node->getChild("enabled",0,true);
-            node->setBoolValue(false);
-            node->setAttribute(SGPropertyNode::USERARCHIVE,false);
-            #ifndef BUILDING_TESTSUITE
-                SG_LOG(SG_NASAL, SG_ALERT, "Nasal module " << moduleName
-                        << " present in FGDATA/Nasal but not configured in defaults.xml. "
-                        << " Please add an entry to defaults.xml, and set " << node->getPath()
-                        << "=true to load the module on-demand at runtime when required."
-                        );
-            #endif
-        }
-    }
-}
-
-void FGNasalSys::loadNativeModule(const std::string& moduleName)
-{
-    if (moduleName == "gui") {
-        NewGUI::registerNasalBindings(this);
-    } else if (moduleName == "canvas") {
-        initNasalCanvas(d->_globals, d->_context);
-    }
-}
-
-// Loads the scripts found under /nasal in the global tree, for either the
-// core modules, or all the others. Modules are loaded in the order of
-// their nodes under /nasal, which is determined by defaults.xml.
-void FGNasalSys::loadAllPropertyScripts(bool core)
-{
-    SGPropertyNode* nasal = globals->get_props()->getNode("nasal");
-    if(!nasal) return;
-
-    // iterate by index: loading a module can add nodes here
-    for(int i=0; i<nasal->nChildren(); i++)
-    {
-        SGPropertyNode* n = nasal->getChild(i);
-        if (n->getBoolValue("core", false) == core) {
-            loadPropertyScripts(n);
-        }
-    }
-}
-
-bool FGNasalSys::loadModuleFile(SGPropertyNode* moduleNode, SGPropertyNode* fileNode)
-{
-    const std::string module = moduleNameForNode(moduleNode);
-    const std::string file = fileNode->getStringValue();
-    SGPath p = resolveModuleFilePath(file);
-    if (p.isNull()) {
-        simgear::reportFailure(simgear::LoadFailure::NotFound, simgear::ErrorCode::AircraftSystems,
-                               string{"Missing nasal file for module:"} + module, sg_location{file});
-        return false;
-    }
-
-    return loadModule(p, module.c_str());
+    return d->findModule(name);
 }
 
 bool FGNasalSys::checkSyntax(const SGPath& file)
@@ -1513,62 +1431,6 @@ bool FGNasalSys::checkSyntax(const SGPath& file)
     const bool ok = !naIsNil(parse(ctx, pathStr.c_str(), mmap.get(), mmap.get_size(), errors));
     naFreeContext(ctx);
     return ok;
-}
-
-// Loads the scripts found under /nasal in the global tree for a single module.
-bool FGNasalSys::loadPropertyScripts(SGPropertyNode* n)
-{
-    bool is_loaded = false;
-
-    std::string module = moduleNameForNode(n);
-
-    loadNativeModule(module);
-
-    if (n->getBoolValue("enabled",true))
-    {
-        // allow multiple files to be specified within a single
-        // Nasal module tag
-        const auto files = n->getChildren("file");
-        const bool file_specified = !files.empty();
-        bool ok = true;
-        for (const auto& fn : files) {
-            ok &= loadModuleFile(n, fn);
-        }
-
-        std::string src = n->getStringValue("script");
-        if(!n->hasChild("script")) src = ""; // Hrm...
-        if(!src.empty())
-            createModule(module.c_str(), n->getPath().c_str(), src.c_str(), src.length());
-
-        if(!file_specified && src.empty())
-        {
-            // module no longer exists - clear the archived "enable" flag
-            n->setAttribute(SGPropertyNode::USERARCHIVE,false);
-            SGPropertyNode* node = n->getChild("enabled",0,false);
-            if (node)
-                node->setAttribute(SGPropertyNode::USERARCHIVE,false);
-
-            SG_LOG(SG_NASAL, SG_ALERT, "Nasal error: " <<
-                    "no <file> or <script> defined in " <<
-                    "/nasal/" << module);
-        }
-        else
-            is_loaded = ok;
-    }
-    else
-    {
-        SGPropertyNode* enable = n->getChild("enabled");
-        if (enable)
-        {
-            FGNasalModuleListener* listener = new FGNasalModuleListener(n);
-            d->_moduleListeners.push_back(listener);
-            enable->addChangeListener(listener, false);
-        }
-    }
-    SGPropertyNode* loaded = n->getChild("loaded",0,true);
-    loaded->setAttribute(SGPropertyNode::PRESERVE,true);
-    loaded->setBoolValue(is_loaded);
-    return is_loaded;
 }
 
 #if defined(BUILDING_TESTSUITE)
@@ -1617,121 +1479,67 @@ void FGNasalSys::logNasalStack(naContext context, string_list& stack)
 // name.
 bool FGNasalSys::loadModule(SGPath file, const char* module)
 {
-    if (!file.exists()) {
-        SG_LOG(SG_NASAL, SG_ALERT, "Cannot load module, missing file:" << file);
-        return false;
-    }
-
-    SGMMapFile mmap(file);
-    mmap.open(SG_IO_IN);
-
-    auto pathStr = file.utf8Str();
-    return createModule(module, pathStr.c_str(), mmap.get(), mmap.get_size());
+    return moduleNamed(module)->runFile(file);
 }
 
-// Parse and run.  Save the local variables namespace, as it will
-// become a sub-object of globals.  The optional "arg" argument can be
-// used to pass an associated property node to the module, which can then
-// be accessed via cmdarg().  (This is, for example, used by XML dialogs.)
+// Parse and run.  The optional "arg" argument can be used to pass an
+// associated property node to the module, which can then be accessed via
+// cmdarg().  (This is, for example, used by XML dialogs.)
 bool FGNasalSys::createModule(const char* moduleName, const char* fileName,
                               const char* src, int len,
                               const SGPropertyNode* cmdarg,
                               int argc, naRef* args,
                               int sourceLineOffset)
 {
-    naContext ctx = naNewContext();
-    std::string errors;
-    naRef code = parse(ctx, fileName, src, len, errors, sourceLineOffset);
-    if(naIsNil(code)) {
-        naFreeContext(ctx);
-        return false;
+    return moduleNamed(moduleName)->run(fileName, src, len, cmdarg, argc, args, sourceLineOffset);
+}
+
+NasalModule* FGNasalSys::moduleNamed(const std::string& name, bool registered, bool* created) const
+{
+    if (created) {
+        *created = false;
     }
 
-
-    // See if we already have a module hash to use.  This allows the
-    // user to, for example, add functions to the built-in math
-    // module.  Make a new one if necessary.
-    naRef locals;
-    naRef modname = naNewString(ctx);
-    naStr_fromdata(modname, (char*)moduleName, strlen(moduleName));
-    if (naIsNil(d->_globals))
-        return false;
-
-    if (!naHash_get(d->_globals, modname, &locals)) {
-        // if we are re-creating the module for canvas, ensure the C++
-        // pieces are re-defined first. As far as I can see, Canvas is the only
-        // hybrid module where C++ pieces and Nasal code are combined.
-        const auto isCanvas = strcmp(moduleName, "canvas") == 0;
-        if (isCanvas) {
-            initNasalCanvas(d->_globals, d->_context);
-            naHash_get(d->_globals, modname, &locals);
-        } else {
-            locals = naNewHash(ctx);
-        }
+    if (auto m = d->findModule(name)) {
+        return m;
     }
 
-    // store the filename in the module hash, so we could reload it
-    // this is only needed for 'top-level' single file modules; for
-    // 'directory' modules we use the file path nodes defined by
-    // FGNasalSys::addModule
-    naRef modFilePath = naNewString(ctx);
-    naStr_fromdata(modFilePath, (char*)fileName, strlen(fileName));
-    hashset(locals, "__moduleFilePath", modFilePath);
-
-    d->_cmdArg = (SGPropertyNode*)cmdarg;
-    callWithContext(ctx, code, argc, args, locals);
-
-    if (const char* error = naGetError(ctx)) {
-        int line = naGetLine(ctx, 0);
-        char* file = naStr_data(naGetSourceFile(ctx, 0));
-        SG_LOG(SG_NASAL, SG_ALERT, "Error loading module '" << moduleName << "': " << error << " (at " << file << ":" << line << ")");
-
-        return false;
+    if (created) {
+        *created = true;
     }
 
-    hashset(d->_globals, moduleName, locals);
+    auto self = const_cast<FGNasalSys*>(this);
+    if (registered) {
+        SGPropertyNode* node = globals->get_props()->getNode("nasal", true)->getChild(name, 0, true);
+        d->_modules.push_back(std::make_unique<NasalModule>(self, name, node));
+        return d->_modules.back().get();
+    }
 
-    naFreeContext(ctx);
-    return true;
+    auto& m = d->_dynamicModules[name];
+    m = std::make_unique<NasalModule>(self, name);
+    return m.get();
 }
 
 void FGNasalSys::deleteModule(const char* moduleName)
 {
-    // native shutdown hook
-    if (strcmp(moduleName, "gui") == 0) {
-        NewGUI::shutdownNasalBindings();
-    }
-
     if (!d->_inited || naIsNil(d->_globals)) {
         // can occur on shutdown due to us being shutdown first, but other
         // subsystems having Nasal objects.
         return;
     }
 
-    auto nasalNode = globals->get_props()->getNode("nasal", true);
-    auto moduleNode = nasalNode->getChild(moduleName, 0);
-    if (moduleNode) {
-        // modules can use this value going false, to trigger unload
-        // behaviours
-        moduleNode->setBoolValue("loaded", false);
+    const auto modules = d->findModules(moduleName);
+    if (modules.empty()) {
+        SG_LOG(SG_NASAL, SG_DEV_ALERT, "deleteModule: no such Nasal module: " << moduleName);
+        return;
     }
 
-    naContext ctx = naNewContext();
-    naRef modname = naNewString(ctx);
-    naStr_fromdata(modname, (char*)moduleName, strlen(moduleName));
-
-    naRef locals;
-    if (naHash_get(d->_globals, modname, &locals)) {
-        naRef unloadFunc = naHash_cget(locals, (char*)"unload");
-        if (naIsFunc(unloadFunc)) {
-            callWithContext(ctx, unloadFunc, 0, nullptr, locals);
-        }
-
-        // now delete the module hash
-        naHash_delete(d->_globals, modname);
+    for (auto m : modules) {
+        m->unload();
     }
 
-    naFreeContext(ctx);
+    // runtime modules are not needed any more: they can be created again
+    d->_dynamicModules.erase(moduleName);
 }
 
 bool FGNasalSys::reloadModuleFromFile(const std::string& moduleName)
@@ -1740,43 +1548,34 @@ bool FGNasalSys::reloadModuleFromFile(const std::string& moduleName)
         return false;
     }
 
-    naRef locals = naHash_cget(d->_globals, (char*)moduleName.c_str());
-    if (naIsNil(locals)) {
-        // no such module
+    // There can be more than one module for a name: aircraft can add a node
+    // with the same module name.
+    const auto modules = d->findModules(moduleName);
+    const bool canReload = std::any_of(modules.begin(), modules.end(),
+                                       [](NasalModule* m) { return m->canReload(); });
+    if (!canReload) {
+        // no such module, or one with no files to load
         return false;
     }
 
-    // check if we have a module entry under /nasal/ - if so, use
-    // this to determine the list of files. All the modules in the Nasal
-    // directory, including top-level single-file ones, have such an entry.
-    // We don't (yet) re-run addModule here so adding new .nas files isn't
-    // possible, but in principle it could be done
-    auto nasalNode = globals->get_props()->getNode("nasal", true);
-    auto moduleNode = nasalNode->getChild(moduleName, 0);
-    if (moduleNode) {
-        // check the files all parse before we delete the existing module,
-        // so a typo doesn't leave us with no module at all
-        for (const auto& f : moduleNode->getChildren("file")) {
-            const SGPath p = resolveModuleFilePath(f->getStringValue());
-            if (p.isNull() || !checkSyntax(p)) {
-                SG_LOG(SG_NASAL, SG_ALERT, "Reload of Nasal module '" << moduleName << "' aborted, problem with file:" << f->getStringValue());
-                return false;
-            }
-        }
-
-        deleteModule(moduleName.c_str());
-        return loadPropertyScripts(moduleNode);
-    } else {
-        // assume it's a single-file module for now
-        naRef filePath = naHash_cget(locals, (char*)"__moduleFilePath");
-        if (naIsNil(filePath)) {
+    // check the files all parse before we delete the existing module,
+    // so a typo doesn't leave us with no module at all
+    for (auto m : modules) {
+        if (!m->checkFiles()) {
+            SG_LOG(SG_NASAL, SG_ALERT, "Reload of Nasal module '" << moduleName << "' aborted");
             return false;
         }
-
-        SGPath path = SGPath::fromUtf8(naStr_data(filePath));
-        deleteModule(moduleName.c_str());
-        return loadModule(path, moduleName.c_str());
     }
+
+    for (auto m : modules) {
+        m->unload();
+    }
+
+    bool ok = true;
+    for (auto m : modules) {
+        ok &= m->load();
+    }
+    return ok;
 }
 
 naRef FGNasalSys::getModule(const std::string& moduleName, bool create) const
@@ -1788,6 +1587,7 @@ naRef FGNasalSys::getModule(const std::string& moduleName, bool create) const
 
         mod = naNewHash(d->_context);
         naHash_set(d->_globals, modname, mod);
+        moduleNamed(moduleName);
     }
     return mod;
 }

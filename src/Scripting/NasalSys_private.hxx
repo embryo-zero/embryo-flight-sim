@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <map>
+#include <memory>
+
 #include <simgear/debug/BufferedLogCallback.hxx>
 #include <simgear/nasal/nasal.h>
 #include <simgear/props/props.hxx>
@@ -11,11 +14,12 @@
 #include <simgear/xml/easyxml.hxx>
 
 #include "NasalModelData.hxx"
+#include "NasalModule.hxx"
 
 // forward decls
 class FGNasalSys;
 class TimerObj; ///< persistent timer created by maketimer
-class FGNasalModuleListener;
+class NasalModule;
 class NasalCommand;
 
 /**
@@ -100,7 +104,7 @@ public:
 
     //friend class FGNasalScript;
     // friend class FGNasalListener;
-    // friend class FGNasalModuleListener;
+    // friend class NasalModule;
 
     SGLockedQueue<SGSharedPtr<FGNasalModelData>> _loadList;
     SGLockedQueue<SGSharedPtr<FGNasalModelData>> _unloadList;
@@ -113,7 +117,18 @@ public:
     std::map<int, FGNasalListener*> _listener;
     std::vector<FGNasalListener*> _dead_listener;
 
-    std::vector<FGNasalModuleListener*> _moduleListeners;
+    // in load order
+    std::vector<std::unique_ptr<NasalModule>> _modules;
+
+    // modules created at runtime, which are not registered under /nasal
+    std::map<std::string, std::unique_ptr<NasalModule>> _dynamicModules;
+
+    // the first module with this name, or null
+    NasalModule* findModule(const std::string& name) const;
+
+    // all the modules with this name: there can be several nodes under /nasal
+    // for one module, e.g. if an aircraft repeats the name
+    std::vector<NasalModule*> findModules(const std::string& name) const;
 
     static int _listenerId;
 

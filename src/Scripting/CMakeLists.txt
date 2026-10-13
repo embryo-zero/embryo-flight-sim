@@ -5,6 +5,7 @@
 set(SOURCES
   nasal-props.cxx
   NasalAddons.cxx
+  NasalModule.cxx
   NasalAircraft.cxx
   NasalPositioned.cxx
   NasalPositioned_cppbind.cxx
@@ -30,6 +31,7 @@ set(HEADERS
   NasalSys.hxx
   NasalSys_private.hxx
   NasalAddons.hxx
+  NasalModule.hxx
   NasalAircraft.hxx
   NasalPositioned.hxx
   NasalCanvas.hxx
