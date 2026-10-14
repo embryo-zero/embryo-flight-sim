@@ -60,7 +60,7 @@ LauncherMainWindow::LauncherMainWindow(bool inSimMode) : QQuickView()
 
     if (!inSimMode) {
 #if defined(Q_OS_MAC)
-        QMenuBar* mb = new QMenuBar();
+        QMenuBar* mb = m_menuBar = new QMenuBar();
 
         QMenu* fileMenu = mb->addMenu(tr("File"));
         QAction* openAction = new QAction(tr("Open saved configuration..."));
@@ -196,6 +196,10 @@ LauncherMainWindow::~LauncherMainWindow()
 {
     // mark the start of QQuickView (and its render-thread GL context) teardown
     flightgear::addSentryBreadcrumb("destroying LauncherMainWindow (QQuickView)", "info");
+
+    // destroy the QMenuBar so Qt removes its native NSMenuItems (File, Tools)
+    // from the main menu, otherwise they linger and clash with FGCocoaMenuBar
+    delete m_menuBar;
 }
 
 bool LauncherMainWindow::event(QEvent *event)

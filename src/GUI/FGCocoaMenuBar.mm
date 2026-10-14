@@ -230,38 +230,63 @@ void FGCocoaMenuBar::CocoaMenuBarPrivate::menuFromProps(NSMenu* menu, SGProperty
     NSString* label = stdStringToCocoa(l);
     string shortcut = n->getStringValue("key");
 
-    NSMenuItem* item;
-    if (index >= [menu numberOfItems]) {
-      if (labelIsSeparator(label)) {
+    const bool isSeparator = labelIsSeparator(label);
+    NSMenuItem *item = nil;
+    if (index < [menu numberOfItems]) {
+      item = [menu itemAtIndex:index];
+      if ([item isSeparatorItem] != isSeparator) {
+        // structure differs, replace this one item
+        [menu removeItemAtIndex:index];
+        item = nil;
+      }
+    }
+
+    if (isSeparator) {
+      if (!item) {
         item = [NSMenuItem separatorItem];
-        [menu addItem:item];
-      } else {
-        item = [menu addItemWithTitle:label action:nil keyEquivalent:@""];
-        if (!shortcut.empty()) {
-          setItemShortcutFromString(item, shortcut);
-        }
-
-        [item setTarget:delegate];
-        [item setAction:@selector(itemAction:)];
-
-        auto cl = new CocoaItemListener(n, item);
-        listeners.push_back(cl);
+        [menu insertItem:item atIndex:index];
       }
     } else {
-      item = [menu itemAtIndex:index];
-      [item setTitle:label];
+      if (!item) {
+        item = [menu insertItemWithTitle:label
+                                  action:nil
+                           keyEquivalent:@""
+                                 atIndex:index];
+      } else {
+        [item setTitle:label];
+      }
+
+      // (re)apply target, since the delegate may have changed since the
+      // item was created
+      [item setKeyEquivalent:@""];
+      [item setKeyEquivalentModifierMask:0];
+      if (!shortcut.empty()) {
+        setItemShortcutFromString(item, shortcut);
+      }
+      [item setTarget:delegate];
+      [item setAction:@selector(itemAction:)];
+
+      listeners.push_back(new CocoaItemListener(n, item));
     }
 
     auto subMenuNode = n->getChild("menu");
     if (subMenuNode) {
-      NSMenu* subMenu = [[NSMenu alloc] init];
+      NSMenu *subMenu = [item submenu];
+      if (!subMenu) {
+        subMenu = [[[NSMenu alloc] init] autorelease];
+        [item setSubmenu:subMenu];
+      }
       menuFromProps(subMenu, subMenuNode);
-      [item setSubmenu: subMenu];
     }
 
     itemBindings[item] = bl;
     ++index;
   } // of item iteration
+
+  // remove any surplus items from a previous build
+  while ([menu numberOfItems] > index) {
+    [menu removeItemAtIndex:index];
+  }
 }
 
 void FGCocoaMenuBar::CocoaMenuBarPrivate::fireBindingsForItem(NSMenuItem *item)
@@ -312,14 +337,28 @@ void FGCocoaMenuBar::init()
     [previousMenu setTitle:@"FlightGear"];
   }
 
-  // clear other menus in the menu-bar, eg from the launcher
-  while ([mainBar numberOfItems] > 1) {
-    [mainBar removeItemAtIndex:1];
+  // listeners and bindings reference items we are about to (re)synchronise
+  for (auto l : p->listeners) {
+    delete l;
+  }
+  p->listeners.clear();
+  p->itemBindings.clear();
+
+  // clear other menus in the menu-bar, eg from the launcher. Menus we
+  // created previously (tagged >= 400) are kept and reused, since replacing
+  // top-level items confuses AppKit's menu tracking.
+  for (NSInteger i = [mainBar numberOfItems] - 1; i >= 1; --i) {
+    if ([[mainBar itemAtIndex:i] tag] < 400) {
+      [mainBar removeItemAtIndex:i];
+    }
   }
 
   for (auto n : props->getChildren("menu")) {
     NSString* label = stdStringToCocoa(getLocalizedLabel(n));
     NSMenuItem* item = [mainBar itemWithTitle:label];
+    if (item && [item tag] < 400) {
+      item = nil;
+    }
     NSMenu* menu;
 
     if (!item) {
@@ -334,6 +373,7 @@ void FGCocoaMenuBar::init()
       [menu autorelease];
     } else {
       menu = item.submenu;
+      item.tag = index + 400;
     }
 
   // synchronise menu with properties

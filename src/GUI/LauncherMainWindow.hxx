@@ -18,6 +18,7 @@ class QQmlEngine;
 class LaunchConfig;
 class ViewCommandLinePage;
 class QQuickItem;
+class QMenuBar;
 class LauncherController;
 class QmlColoredImageProvider;
 
@@ -43,4 +44,5 @@ private:
 
     LauncherController* m_controller;
     QmlColoredImageProvider* m_coloredIconProvider;
+    QMenuBar* m_menuBar = nullptr; // macOS only; owns the native menu items
 };
