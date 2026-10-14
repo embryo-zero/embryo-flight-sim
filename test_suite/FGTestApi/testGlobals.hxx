@@ -3,10 +3,11 @@
 
 #pragma once
 
-#include <string>
 #include <functional>
-#include <vector>
 #include <optional>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 #include <simgear/math/sg_types.hxx>
 #include <simgear/math/SGGeod.hxx>
@@ -104,6 +105,47 @@ std::optional<string_list> executeNasalExpectRuntimeErrors(const std::string& co
 std::string parseNasalExpectError(const std::string& code);
 
 bool geodsApproximatelyEqual(const SGGeod& a, const SGGeod& b);
+
+/**
+ * Thrown by FG_REQUIRE_GRAPHICS() to skip a test. The test runner catches
+ * this, and reports the test as skipped rather than failed.
+ */
+class SkipTest : public std::runtime_error
+{
+public:
+    explicit SkipTest(const std::string& testName)
+        : std::runtime_error(testName)
+    {
+    }
+};
+
+/**
+ * @brief set by the test runner (--headless) when there is no window system or
+ * graphics backend available, eg on CI runners.
+ *
+ * Anything which needs one - notably Canvas text layout, which goes through
+ * Pango/HarfBuzz and can crash without a display or fonts - should use
+ * FG_REQUIRE_GRAPHICS() to skip itself.
+ */
+void setHeadless(bool headless);
+bool isHeadless();
+
+/// record that a test was skipped, so the runner can report it
+void recordSkippedTest(const std::string& testName);
+
+/// the tests skipped since the last call; clears the list
+std::vector<std::string> takeSkippedTests();
+
+/**
+ * Skip the current test if the runner was started with --headless.
+ * Use at the start of the test method.
+ */
+#define FG_REQUIRE_GRAPHICS()                    \
+    do {                                         \
+        if (FGTestApi::isHeadless()) {           \
+            throw FGTestApi::SkipTest(__func__); \
+        }                                        \
+    } while (false)
 
 namespace tearDown {
 

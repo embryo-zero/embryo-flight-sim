@@ -10,6 +10,7 @@
 #include <simgear/debug/logstream.hxx>
 #include <simgear/misc/strutils.hxx>
 
+#include "FGTestApi/testGlobals.hxx"
 #include "dataStore.hxx"
 #include "fgTestRunner.hxx"
 #include "formatting.hxx"
@@ -61,6 +62,10 @@ void helpPrintout(std::ostream &stream) {
     stream << "    -d, --debug         disable IO capture for debugging (super verbose output).\n";
     stream << "    --no-summary        disable the final summary printout.\n";
     stream << '\n';
+    stream << "  Environment options:\n";
+    stream << "    --headless          skip tests which need a window system or graphics\n";
+    stream << "                        backend (eg text layout), for headless CI runners.\n";
+    stream << '\n';
     stream << "  FG options:\n";
     stream << "    --fg-root           the path to FGData.\n";
     stream << '\n';
@@ -69,6 +74,7 @@ void helpPrintout(std::ostream &stream) {
     stream << "  FG_TEST_LOG_SPLIT     equivalent to the --log-split option.\n";
     stream << "  FG_TEST_TIMINGS       equivalent to the -t or --timings option.\n";
     stream << "  FG_TEST_DEBUG         equivalent to the -d or --debug option.\n";
+    stream << "  FG_TEST_HEADLESS      equivalent to the --headless option.\n";
     stream << "  FG_ROOT               the path to FGData.  The order of precedence is\n";
     stream << "                         --fg-root, the FG_DATA_DIR CMake option, FG_ROOT,\n";
     stream << "                        '../fgdata/', and '../data/'.\n";
@@ -138,7 +144,7 @@ int main(int argc, char **argv)
     // Declarations.
     int         status_gui=-1, status_simgear=-1, status_system=-1, status_unit=-1, status_fgdata=-1;
     bool        run_system=false, run_unit=false, run_gui=false, run_simgear=false, run_fgdata=false;
-    bool        logSplit=false;
+    bool logSplit = false, headless = false;
     bool        timings=false, ctest_output=false, junit_output=false, debug=false, printSummary=true, help=false;
     char        *subset_system=NULL, *subset_unit=NULL, *subset_gui=NULL, *subset_simgear=NULL, *subset_fgdata=NULL;
     bool        failure=false;
@@ -164,6 +170,8 @@ int main(int argc, char **argv)
         timings = true;
     if (getenv("FG_TEST_DEBUG"))
         debug = true;
+    if (getenv("FG_TEST_HEADLESS"))
+        headless = true;
     if (failure)
         return 1;
 
@@ -235,7 +243,11 @@ int main(int argc, char **argv)
         } else if (arg == "-d" || arg == "--debug") {
             debug = true;
 
-        // No summary output.
+            // No window system / graphics backend.
+        } else if (arg == "--headless") {
+            headless = true;
+
+            // No summary output.
         } else if (arg == "--no-summary") {
             printSummary = false;
 
@@ -264,6 +276,8 @@ int main(int argc, char **argv)
         run_simgear = true;
         run_fgdata = true;
     }
+
+    FGTestApi::setHeadless(headless);
 
     // Set up the data store singleton and FGData path.
     DataStore& data = DataStore::get();

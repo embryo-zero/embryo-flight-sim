@@ -7,10 +7,13 @@
  */
 
 // std
+#include <algorithm>
 #include <any>
+#include <cassert>
 #include <cstddef>
 #include <iterator>
 
+#include <simgear/misc/strutils.hxx>
 #include <simgear/props/props.hxx>
 #include <simgear/structure/exception.hxx>
 
@@ -22,21 +25,25 @@
 #include <GUI/AirportParkingModel.hxx>
 #include <GUI/ItemModel.hxx>
 #include <Scripting/NasalSys.hxx>
+#include <Translations/FGTranslate.hxx>
 
 size_t ItemModel::addChangeCallback(ChangeCallback cb)
 {
-    const auto r = m_callbacks.size();
-    m_callbacks.push_back(cb);
-    return r;
+    const auto id = m_nextCallbackId++;
+    m_callbacks.emplace(id, std::move(cb));
+    return id;
 }
 
-void ItemModel::removeChangeCallback(size_t index)
+size_t ItemModel::addNasalChangeListener(std::function<void(int, int, int)> f)
 {
-    if (index >= m_callbacks.size()) {
-        return;
-    }
+    return addChangeCallback([f](Change t, size_t row, size_t count) {
+        f(static_cast<int>(t), static_cast<int>(row), static_cast<int>(count));
+    });
+}
 
-    m_callbacks.erase(m_callbacks.begin() + index);
+void ItemModel::removeChangeCallback(size_t callbackId)
+{
+    m_callbacks.erase(callbackId);
 }
 
 void ItemModel::didChangeData(int row, int changedRows)
@@ -48,8 +55,10 @@ void ItemModel::didChangeData(int row, int changedRows)
 
 void ItemModel::fireCallbacks(Change t, size_t row, size_t count)
 {
-    for (auto cb : m_callbacks) {
-        cb(t, row, count);
+    // iterate a copy, so callbacks can safely add / remove callbacks
+    const auto callbacks = m_callbacks;
+    for (const auto& entry : callbacks) {
+        entry.second(t, row, count);
     }
 }
 
@@ -62,7 +71,7 @@ void ItemModel::didReset()
 void ItemModel::beginAddRows(int row, int count)
 {
     assert(!m_addRemoveActive);
-    assert(row < m_cachedCount);
+    assert(row <= m_cachedCount); // appending (row == count) is valid
     m_addRemoveActive = true;
     m_addRemoveRow = row;
     m_addRemoveCount = count;
@@ -98,7 +107,24 @@ void ItemModel::endRemoveRows()
 
 std::string ItemModel::labelAt(size_t index) const
 {
-    return std::any_cast<std::string>(dataAt(index, "label"));
+    const auto label = dataAt(index, "label");
+    // a row can briefly exist without a label, eg a property item which has
+    // been created but not yet populated
+    if (!label.has_value()) {
+        return {};
+    }
+
+    if (const auto s = std::any_cast<std::string>(&label)) {
+        return *s;
+    } else if (const auto i = std::any_cast<int>(&label)) {
+        return std::to_string(*i);
+    } else if (const auto d = std::any_cast<double>(&label)) {
+        return std::to_string(*d);
+    } else if (const auto b = std::any_cast<bool>(&label)) {
+        return *b ? "true" : "false";
+    }
+
+    throw sg_exception("ItemModel::labelAt: label data is not a string-convertible type");
 }
 
 std::any ItemModel::valueAt(size_t index) const
@@ -189,6 +215,7 @@ std::any propertyValueToAny(SGPropertyNode_ptr p)
     case simgear::props::DOUBLE:
         return p->getDoubleValue();
     case simgear::props::STRING:
+    case simgear::props::UNSPECIFIED: // untyped text, eg loaded from XML
         return p->getStringValue();
     default:
         throw sg_exception("Add support for extended property types to propertyValueToAny");
@@ -304,7 +331,11 @@ public:
             c->setAttribute(SGPropertyNode::VALUE_CHANGED_DOWN, true);
             c->setAttribute(SGPropertyNode::VALUE_CHANGED_UP, true);
             // if there's existing child/leaf nodes, ensure they fire valueChanged up
-            for (auto p : dataNodes) {
+            for (const auto& p : dataNodes) {
+                // skip special paths: '.' is the item itself, '#' is the row index
+                if (p.empty() || (p == ".") || (p == "#")) {
+                    continue;
+                }
                 auto dn = c->getNode(p);
                 if (dn) {
                     dn->setAttribute(SGPropertyNode::VALUE_CHANGED_UP, true);
@@ -318,6 +349,28 @@ public:
     std::string m_labelPath; ///< relative path to label property, inside each item. (can be '.' for direct value)
     std::string m_valuePath; ///< relative path to value property, inside each item.
     std::string m_itemName;  ///< child node name of the root, we include in the model.
+
+    bool m_autoTranslate = false;
+    std::string m_translationResource;
+    std::string m_translationDomain = "core";
+
+    /// the property holding an item's label, or null
+    SGPropertyNode* labelNode(SGPropertyNode* item) const
+    {
+        if (m_labelPath == ".") {
+            return item;
+        }
+        return item->getNode(m_labelPath);
+    }
+
+    /// the property holding an item's value, or null
+    SGPropertyNode* valueNode(SGPropertyNode* item) const
+    {
+        if (m_valuePath.empty() || m_valuePath == ".") {
+            return item;
+        }
+        return item->getNode(m_valuePath);
+    }
 
     mutable bool m_cacheValid = false;
     /**
@@ -368,6 +421,42 @@ void PropertyItemModel::setValuePath(const std::string& s)
     d->rebuildItemCache();
 }
 
+void PropertyItemModel::setAutoTranslate(bool b)
+{
+    if (d->m_autoTranslate == b) {
+        return;
+    }
+    d->m_autoTranslate = b;
+    d->rebuildItemCache();
+}
+
+bool PropertyItemModel::autoTranslate() const
+{
+    return d->m_autoTranslate;
+}
+
+void PropertyItemModel::setTranslationResource(const std::string& resource)
+{
+    d->m_translationResource = resource;
+    d->rebuildItemCache();
+}
+
+std::string PropertyItemModel::translationResource() const
+{
+    return d->m_translationResource;
+}
+
+void PropertyItemModel::setTranslationDomain(const std::string& domain)
+{
+    d->m_translationDomain = domain;
+    d->rebuildItemCache();
+}
+
+std::string PropertyItemModel::translationDomain() const
+{
+    return d->m_translationDomain;
+}
+
 std::any PropertyItemModel::dataAt(size_t index, const std::string& key) const
 {
     d->validateItemCache();
@@ -376,17 +465,24 @@ std::any PropertyItemModel::dataAt(size_t index, const std::string& key) const
     }
 
     const auto& node = d->m_itemCache.at(index);
-    if (key == "label") {
-        if (d->m_labelPath == ".") {
-            return propertyValueToAny(node);
+    if (key == "label" || key == "labelKey") {
+        auto label = propertyValueToAny(d->labelNode(node));
+        if ((key == "label") && d->m_autoTranslate && !d->m_translationResource.empty() && label.has_value()) {
+            // only translate labels marked as such, as for XML dialogs
+            auto ln = d->labelNode(node);
+            if (ln->getAttribute(SGPropertyNode::TRANSLATE)) {
+                const auto text = simgear::strutils::strip(ln->getStringValue());
+                return FGTranslate(d->m_translationDomain)
+                    .getWithDefault(d->m_translationResource, text, text);
+            }
         }
-        return propertyValueToAny(node->getNode(d->m_labelPath));
+        return label;
     } else if (key == "value") {
         // allow specifying the index as the value, for easy list-of-strings models
         if (d->m_valuePath == "#") {
             return std::any{index};
         }
-        return propertyValueToAny(node->getNode(d->m_valuePath));
+        return propertyValueToAny(d->valueNode(node));
     }
 
     auto n = node->getNode(key);
@@ -395,9 +491,18 @@ std::any PropertyItemModel::dataAt(size_t index, const std::string& key) const
 
 static naRef f_makePropetyItemModel(const nasal::CallContext& ctx)
 {
+    // args: root node, item name, [label path], [value path]
     const auto itemName = ctx.getArg<std::string>(1);
+    const auto labelPath = ctx.getArg<std::string>(2);
+    const auto valuePath = ctx.getArg<std::string>(3);
     const auto rootNode = ghostToPropNode(ctx.requireArg<naRef>(0));
     PropertyItemModel* pi = new PropertyItemModel(rootNode);
+    if (!labelPath.empty()) {
+        pi->setLabelPath(labelPath);
+    }
+    if (!valuePath.empty()) {
+        pi->setValuePath(valuePath);
+    }
     if (!itemName.empty()) {
         pi->setItemName(itemName);
     }
@@ -446,9 +551,21 @@ static naRef f_makeAirportParkingModel(const nasal::CallContext& ctx)
 
 void ItemModel::setupGhosts(nasal::Hash& ns)
 {
+    // constants for the change type passed to listeners, see addNasalChangeListener
+    ns.set("MODEL_CHANGE_RESET", static_cast<int>(Change::Reset));
+    ns.set("MODEL_CHANGE_MODIFIED", static_cast<int>(Change::Modified));
+    ns.set("MODEL_CHANGE_ROWS_WILL_BE_ADDED", static_cast<int>(Change::RowsWillBeAdded));
+    ns.set("MODEL_CHANGE_ROWS_ADDED", static_cast<int>(Change::RowsAdded));
+    ns.set("MODEL_CHANGE_ROWS_WILL_BE_REMOVED", static_cast<int>(Change::RowsWillBeRemoved));
+    ns.set("MODEL_CHANGE_ROWS_REMOVED", static_cast<int>(Change::RowsRemoved));
+
     nasal::Ghost<ItemModelRef>::init("gui.AbstractItemModel")
         .member("count", &ItemModel::count)
-        .method("dataAt", &ItemModel::dataAt);
+        .method("dataAt", &ItemModel::dataAt)
+        .method("labelAt", &ItemModel::labelAt)
+        .method("valueAt", &ItemModel::valueAt)
+        .method("addChangeListener", &ItemModel::addNasalChangeListener)
+        .method("removeChangeListener", &ItemModel::removeChangeCallback);
     nasal::Ghost<SGSharedPtr<NasalItemModel>>::init("gui.NasalItemModel")
         .bases<ItemModelRef>()
         .bases<nasal::ObjectRef>()
@@ -464,7 +581,10 @@ void ItemModel::setupGhosts(nasal::Hash& ns)
         .bases<ItemModelRef>()
         .member("itemName", &PropertyItemModel::setItemName)
         .member("labelPath", &PropertyItemModel::setLabelPath)
-        .member("valuePath", &PropertyItemModel::setValuePath);
+        .member("valuePath", &PropertyItemModel::setValuePath)
+        .member("autoTranslate", &PropertyItemModel::autoTranslate, &PropertyItemModel::setAutoTranslate)
+        .member("translationResource", &PropertyItemModel::translationResource, &PropertyItemModel::setTranslationResource)
+        .member("translationDomain", &PropertyItemModel::translationDomain, &PropertyItemModel::setTranslationDomain);
 
     nasal::Hash pmodel_hash = ns.createHash("PropertyItemModel");
     pmodel_hash.set("new", &f_makePropetyItemModel);

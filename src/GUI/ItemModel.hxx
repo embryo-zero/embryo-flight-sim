@@ -8,9 +8,13 @@
 
 #pragma once
 
-#include "simgear/props/props.hxx"
 #include <any>
 #include <functional>
+#include <map>
+#include <memory>
+#include <simgear/props/props.hxx>
+#include <string>
+#include <vector>
 
 namespace nasal {
 class Hash;
@@ -38,8 +42,21 @@ public:
 
     using ChangeCallback = std::function<void(Change t, size_t row, size_t count)>;
 
+    /**
+     * @brief register a callback for model changes
+     * @return a stable identifier, to pass to removeChangeCallback. Identifiers
+     * are never reused, so removing one callback does not invalidate others.
+     */
     size_t addChangeCallback(ChangeCallback cb);
-    void removeChangeCallback(size_t index);
+    void removeChangeCallback(size_t callbackId);
+
+    /**
+     * Nasal-facing variant of addChangeCallback. The callback receives the
+     * change type as an integer matching the gui.MODEL_CHANGE_* constants
+     * (the values of ItemModel::Change), the first row and the row count.
+     * Remove with removeChangeCallback.
+     */
+    size_t addNasalChangeListener(std::function<void(int, int, int)> f);
 
     static void setupGhosts(nasal::Hash& ns);
 
@@ -62,7 +79,8 @@ private:
     bool m_addRemoveActive = false;
     size_t m_addRemoveRow = 0,
            m_addRemoveCount = 0;
-    std::vector<ChangeCallback> m_callbacks;
+    size_t m_nextCallbackId = 1;
+    std::map<size_t, ChangeCallback> m_callbacks; // ordered by id, so fired in registration order
     mutable size_t m_cachedCount = 0;
 };
 
@@ -77,6 +95,28 @@ public:
     void setItemName(const std::string& s);
     void setLabelPath(const std::string& s);
     void setValuePath(const std::string& s);
+
+    /**
+     * Enable translation of labels. When enabled (and a translation resource
+     * is set), a label is translated if its property carries the 'translate'
+     * attribute, mirroring the behaviour of the XML dialog system. The
+     * untranslated label is always available via the 'labelKey' data key.
+     */
+    void setAutoTranslate(bool b);
+    bool autoTranslate() const;
+
+    /**
+     * Translation resource (aka context) to look labels up in, eg
+     * "dialog-airports". Translation is skipped if this is empty.
+     */
+    void setTranslationResource(const std::string& resource);
+    std::string translationResource() const;
+
+    /**
+     * Translation domain, eg "core" (the default) or "current-aircraft"
+     */
+    void setTranslationDomain(const std::string& domain);
+    std::string translationDomain() const;
 
     size_t count() const override;
     std::any dataAt(size_t index, const std::string& key) const override;

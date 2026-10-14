@@ -7,6 +7,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "test_suite/dataStore.hxx"
 #include <ctime>
+#include <utility>
 
 #include "TestDataLogger.hxx"
 #include "testGlobals.hxx"
@@ -532,6 +533,29 @@ SGPropertyNode_ptr propsFromString(const std::string& s, size_t lineOffset)
 bool geodsApproximatelyEqual(const SGGeod& a, const SGGeod& b)
 {
     return SGGeodesy::distanceM(a, b) < 50.0;
+}
+
+static bool static_headless = false;
+static std::vector<std::string> static_skippedTests;
+
+void setHeadless(bool headless)
+{
+    static_headless = headless;
+}
+
+bool isHeadless()
+{
+    return static_headless;
+}
+
+void recordSkippedTest(const std::string& testName)
+{
+    static_skippedTests.push_back(testName);
+}
+
+std::vector<std::string> takeSkippedTests()
+{
+    return std::exchange(static_skippedTests, {});
 }
 
 

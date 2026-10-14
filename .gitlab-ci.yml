@@ -341,7 +341,26 @@ test:
   script:
     - cd $BUILD_DIR
     - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CI_PROJECT_DIR/osg-dist/lib
-    - ./test_suite/fgfs_test_suite --fg-root $CI_PROJECT_DIR/testFGData --junit
+    # Run under gdb (if available) so a crash prints a back-trace of all threads.
+    # gdb -batch doesn't propagate the program's exit status, so do it by hand:
+    # $_exitcode is void if the program didn't exit normally (i.e. it crashed).
+    - |
+      cat > gdb_cmds.txt <<'EOF'
+      set pagination off
+      set confirm off
+      handle SIGPIPE nostop noprint pass
+      run
+      if $_isvoid($_exitcode)
+        echo \n=== test suite crashed, back-trace follows ===\n
+        bt full
+        thread apply all bt
+        quit 134
+      else
+        quit $_exitcode
+      end
+      EOF
+      gdb -batch -x gdb_cmds.txt --args ./test_suite/fgfs_test_suite --fg-root $CI_PROJECT_DIR/testFGData --headless --junit
+
   needs:
     - job: linux-build
       artifacts: true

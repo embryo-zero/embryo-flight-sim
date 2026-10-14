@@ -89,6 +89,11 @@ naRef f_dialogCanResize(FGPUICompatDialog& dialog, naContext c)
     return nasal::to_nasal(c, dialog.isFlagSet(FGDialog::WindowFlags::Resizable));
 }
 
+naRef f_dialogTranslationDomain(FGPUICompatDialog& dialog, naContext c)
+{
+    return nasal::to_nasal(c, dialog.translationDomain());
+}
+
 naRef f_dialogPeer(FGPUICompatDialog& dialog, naContext c)
 {
     return nasal::to_nasal(c, dialog._peer);
@@ -108,6 +113,7 @@ void FGPUICompatDialog::setupGhost(nasal::Hash& compatModule)
         .member("height", &FGPUICompatDialog::height)
         .member("windowType", &FGPUICompatDialog::windowType)
         .member("uiVersion", &FGPUICompatDialog::uiVersion)
+        .member("translationDomain", f_dialogTranslationDomain)
         .member("resizeable", f_dialogCanResize)
         .member("root", f_dialogRootObject)
         .member("_peer", f_dialogPeer)
