@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "config.h"
-#include "simgear/debug/debug_types.h"
-#include "simgear/structure/SGBinding.hxx"
 
 #include "PUICompatObject.hxx"
 
@@ -12,10 +10,13 @@
 #include <cmath>
 #include <string>
 
+#include <simgear/debug/debug_types.h>
 #include <simgear/misc/strutils.hxx>
 #include <simgear/nasal/cpputils/integers.hxx>
 #include <simgear/props/props.hxx>
 #include <simgear/props/props_io.hxx> // for copyProperties
+#include <simgear/structure/SGBinding.hxx>
+#include <simgear/structure/SGDataLocation.hxx>
 
 #include <GUI/FGPUICompatDialog.hxx>
 #include <GUI/new_gui.hxx>
@@ -245,6 +246,23 @@ void PUICompatObject::init()
     const auto uiVersion = dialog()->uiVersion();
 
     _name = _config->getStringValue("name");
+    if (!_name.empty()) {
+        // widgets are initialised in the same depth-first order that
+        // widgetByName() searches, so any earlier widget with this name will
+        // be found first (and if it's us, there's no duplicate yet)
+        const auto existing = dialog()->widgetByName(_name);
+        if (existing && (existing.get() != this)) {
+            const std::string msg = "In dialog '" + std::string(dialog()->getName()) +
+                                    "', duplicate widget name '" + _name;
+            if (uiVersion >= 2) {
+                throw sg_exception(msg + ": widget names must be unique at ui-version >= 2", {},
+                                   sg_location{_config->getLocation()});
+            }
+
+            SG_LOG(SG_GUI, SG_DEV_WARN, msg << ": names should be unique (not enforced at ui-version < 2, "
+                                               "but lookups by name only find the first)");
+        }
+    }
     _label = _config->getStringValue("label");
     bool isLive = _config->getBoolValue("live");
 

@@ -118,6 +118,13 @@ public:
 
     void close() override;
 
+    /**
+     * @brief Update the stored geometry, eg from the Nasal peer with the
+     * window's current (user-modified) position and size, when closing. This
+     * doesn't move or resize the window.
+     */
+    void setGeometry(double x, double y, double w, double h);
+
     std::string title() const;
     void setTitle(const std::string& s);
 
@@ -150,6 +157,8 @@ private:
     friend naRef f_makeDialogPeer(const nasal::CallContext& ctx);
     friend naRef f_dialogRootObject(FGPUICompatDialog& dialog, naContext c);
     friend naRef f_dialogPeer(FGPUICompatDialog& dialog, naContext c);
+
+    void computeInitialGeometry();
 
     // Show the dialog.
     void display(SGPropertyNode* props);

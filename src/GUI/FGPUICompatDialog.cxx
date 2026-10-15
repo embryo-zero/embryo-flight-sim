@@ -6,9 +6,9 @@
 #include "GUI/dialog.hxx"
 #include "config.h"
 
-#include <utility>
-
 #include "FGPUICompatDialog.hxx"
+#include <algorithm>
+#include <utility>
 
 #include <simgear/debug/BufferedLogCallback.hxx>
 #include <simgear/misc/strutils.hxx>
@@ -16,6 +16,7 @@
 #include <simgear/props/props_io.hxx>
 #include <simgear/scene/tsync/terrasync.hxx>
 #include <simgear/structure/SGBinding.hxx>
+
 
 #include <Main/fg_os.hxx>
 #include <Main/fg_props.hxx>
@@ -117,6 +118,7 @@ void FGPUICompatDialog::setupGhost(nasal::Hash& compatModule)
         .member("resizeable", f_dialogCanResize)
         .member("root", f_dialogRootObject)
         .member("_peer", f_dialogPeer)
+        .method("setGeometry", &FGPUICompatDialog::setGeometry)
         .method("close", &FGPUICompatDialog::requestClose)
         .method("findWidget", f_dialogWidgetByName);
 
@@ -151,12 +153,14 @@ FGPUICompatDialog::~FGPUICompatDialog()
 void FGPUICompatDialog::close()
 {
     if (_peer) {
+        // the peer reports the final window geometry via setGeometry()
         _peer->callMethod<void>("onClose");
     }
 
     _props->setIntValue("lastx", getX());
     _props->setIntValue("lasty", getY());
-    // FIXME: save width/height as well?
+    _props->setIntValue("lastwidth", width());
+    _props->setIntValue("lastheight", height());
 
     auto nas = globals->get_subsystem<FGNasalSys>();
     if (nas) {
@@ -196,6 +200,9 @@ bool FGPUICompatDialog::init()
             return false;
         }
 
+        // done before init so restored size is available
+        computeInitialGeometry();
+
         _peer = f(_windowType, SelfRef{this});
         _peer->setDialog(this);
         _peer->callMethod<void>("init", nas->wrappedPropsNode(_props));
@@ -230,6 +237,17 @@ bool FGPUICompatDialog::init()
 
     } catch (std::exception& e) {
         SG_LOG(SG_GUI, SG_ALERT, "Failed to build dialog:" << e.what());
+
+        // tear down whatever was built so far, so we don't leave a
+        // half-constructed window behind
+        if (_peer) {
+            _peer->callMethod<void>("onClose");
+            _peer.clear();
+        }
+        if (_root) {
+            _root->recursiveOnDelete();
+            _root.clear();
+        }
 
         return false;
     }
@@ -296,41 +314,57 @@ void FGPUICompatDialog::display(SGPropertyNode* props)
     relayout();
 }
 
-void FGPUICompatDialog::relayout()
+void FGPUICompatDialog::computeInitialGeometry()
 {
-    _needsRelayout = false;
-
     // map from physical to logical units for PUI
     const double ratio = fgGetDouble("/sim/rendering/gui-pixel-ratio", 1.0);
     const int physicalWidth = fgGetInt("/sim/startup/xsize"),
               physicalHeight = fgGetInt("/sim/startup/ysize");
     const int screenw = static_cast<int>(physicalWidth / ratio),
               screenh = static_cast<int>(physicalHeight / ratio);
-#if 0
-    bool userx = _props->hasValue("x");
-    bool usery = _props->hasValue("y");
-    bool userw = _props->hasValue("width");
-    bool userh = _props->hasValue("height");
-#endif
+
     int px, py, savex, savey;
 
-    const int pw = _props->getIntValue("width", -1);
-    const int ph = _props->getIntValue("height", -1);
+    int pw = _props->getIntValue("width", -1);
+    int ph = _props->getIntValue("height", -1);
+
+    // lastx/lasty/lastwidth/lastheight are written by close(), so a dialog
+    // shown again reappears where the user left it. They take precedence
+    // over the x/y/width/height from the XML.
+    const bool haveLastPos = _props->hasValue("lastx") && _props->hasValue("lasty");
+    if (isFlagSet(FGDialog::WindowFlags::Resizable) &&
+        _props->hasValue("lastwidth") && _props->hasValue("lastheight")) {
+        // only restore sizes the user could have changed
+        pw = _props->getIntValue("lastwidth");
+        ph = _props->getIntValue("lastheight");
+    }
+
     px = savex = _props->getIntValue("x", (screenw - pw) / 2);
     py = savey = _props->getIntValue("y", (screenh - ph) / 2);
 
-#if 0
-    // Negative x/y coordinates are interpreted as distance from the top/right
-    // corner rather than bottom/left.
-    if (userx && px < 0)
-        px = screenw - pw + px;
-    if (usery && py < 0)
-        py = screenh - ph + py;
-#endif
+    if (haveLastPos) {
+        // keep at least part of the window (the title bar) reachable, in case
+        // the screen / window size changed since the geometry was saved
+        const int minVisible = 40;
+        px = std::clamp(_props->getIntValue("lastx"),
+                        minVisible - std::max(pw, minVisible), screenw - minVisible);
+        py = std::clamp(_props->getIntValue("lasty"), 0, screenh - minVisible);
+    }
 
     _geometry = SGRectd{static_cast<double>(px), static_cast<double>(py),
                         static_cast<double>(pw), static_cast<double>(ph)};
-    _peer->callMethod<void>("geometryChanged");
+}
+
+void FGPUICompatDialog::relayout()
+{
+    _needsRelayout = false;
+    _peer->callMethod<void>("onGeometryChanged");
+}
+
+void FGPUICompatDialog::setGeometry(double x, double y, double w, double h)
+{
+    _geometry = SGRectd{x, y, w, h};
+    _needsRelayout = true;
 }
 
 double FGPUICompatDialog::getX() const
