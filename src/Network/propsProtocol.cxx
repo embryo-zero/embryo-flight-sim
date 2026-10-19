@@ -687,7 +687,7 @@ seti <var> <val>   set Int <var> to a new <val>\r\n\
 del <var> <nod>    delete <nod> in <var>\r\n\
 subscribe <var>	   subscribe to property changes \r\n\
 unsubscribe <var>  unsubscribe from property changes (var must be the property name/path used by subscribe)\r\n\
-nasal [EOF <marker>]  execute arbitrary Nasal code (simulator must be running with Nasal allowed from sockets)\r\n\
+nasal [eof <marker>]  execute arbitrary Nasal code (simulator must be running with Nasal allowed from sockets)\r\n\
 ";
                 push(msg);
             }
