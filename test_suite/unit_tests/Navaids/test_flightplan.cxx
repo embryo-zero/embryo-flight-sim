@@ -800,6 +800,38 @@ void FlightplanTests::testBasicDiscontinuity()
 
 }
 
+// https://gitlab.com/flightgear/flightgear/-/work_items/3550
+void FlightplanTests::testDeleteActiveWaypointBeforeDiscontinuity()
+{
+    FlightPlanRef fp1 = makeTestFP("LIRF"s, "34L"s, "LEBL"s, "25R"s,
+                                   "ESINO GITRI BALEN MUREN TOSNU"s);
+
+    fp1->insertWayptAtIndex(new Discontinuity(fp1), 4); // between BALEN and MUREN
+    CPPUNIT_ASSERT(fp1->legAtIndex(3)->waypoint()->ident() == "BALEN");
+    CPPUNIT_ASSERT(fp1->legAtIndex(4)->waypoint()->type() == "discontinuity");
+
+    // activate, and make BALEN (the WP before the discontinuity) current
+    fp1->setCurrentIndex(3);
+    CPPUNIT_ASSERT(fp1->isActive());
+    CPPUNIT_ASSERT_EQUAL(3, fp1->currentIndex());
+
+    // delete the active waypoint; the discontinuity becomes the current leg
+    fp1->deleteIndex(3);
+
+    CPPUNIT_ASSERT_EQUAL(3, fp1->currentIndex());
+    CPPUNIT_ASSERT(fp1->currentLeg()->waypoint()->type() == "discontinuity");
+
+    // exercise the things a delegate / the route manager would touch
+    // on the new current leg; the bug report indicates an exception here
+    auto leg = fp1->currentLeg();
+    CPPUNIT_ASSERT_NO_THROW(leg->courseDeg());
+    CPPUNIT_ASSERT_NO_THROW(leg->distanceNm());
+    CPPUNIT_ASSERT_NO_THROW(fp1->totalDistanceNm());
+    CPPUNIT_ASSERT_NO_THROW(fp1->nextLeg());
+    CPPUNIT_ASSERT_NO_THROW(fp1->previousLeg());
+    CPPUNIT_ASSERT_NO_THROW(fp1->sequence());
+}
+
 void FlightplanTests::testOnlyDiscontinuityRoute()
 {
     FlightPlanRef f = FlightPlan::create();

@@ -1,26 +1,9 @@
-/*
- * Copyright (C) 2019 James Turner
- *
- * This file is part of the program FlightGear.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
 
 
-#ifndef _FG_GPS_UNIT_TESTS_HXX
-#define _FG_GPS_UNIT_TESTS_HXX
+// SPDX-FileCopyrightText: 2019 James Turner
+// SPDX-License-Identifier: GPL-2.0-or-later
 
+#pragma once
 
 #include <cppunit/extensions/HelperMacros.h>
 #include <cppunit/TestFixture.h>
@@ -59,7 +42,8 @@ class GPSTests : public CppUnit::TestFixture
     CPPUNIT_TEST(testCourseLegIntermediateWaypoint);
     CPPUNIT_TEST(testExceedFlyByMaxAngleTurn);
     CPPUNIT_TEST(testFlyOverMaxInterceptAngle);
-    
+    CPPUNIT_TEST(testDeleteActiveWaypointBeforeDiscontinuity);
+
     CPPUNIT_TEST_SUITE_END();
 
     void setPositionAndStabilise(GPS* gps, const SGGeod& g);
@@ -67,7 +51,7 @@ class GPSTests : public CppUnit::TestFixture
     GPS* setupStandardGPS(SGPropertyNode_ptr config = {},
                                           const std::string name = "gps", const int index = 0);
     void setupRouteManager();
-    
+
 public:
     // Set up function for each test.
     void setUp();
@@ -98,6 +82,5 @@ public:
     void testCourseLegIntermediateWaypoint();
     void testExceedFlyByMaxAngleTurn();
     void testFlyOverMaxInterceptAngle();
+    void testDeleteActiveWaypointBeforeDiscontinuity();
 };
-
-#endif  // _FG_GPS_UNIT_TESTS_HXX

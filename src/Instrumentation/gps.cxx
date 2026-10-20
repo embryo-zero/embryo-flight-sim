@@ -172,6 +172,8 @@ GPS::init ()
   _apDrivingFlag = fgGetNode("/autopilot/settings/gps-driving-true-heading", true);
   _apTrueHeading = fgGetNode("/autopilot/settings/true-heading-deg",true);
 
+  _rnavStatus = _gpsNode->getChild("rnav-controller-status", 0, true);
+
   clearScratch();
   clearOutput();
 }
@@ -312,20 +314,22 @@ GPS::clearOutput()
   _magnetic_bug_error_node->setDoubleValue(0);
   _northSouthVelocity->setDoubleValue(0.0);
   _eastWestVelocity->setDoubleValue(0.0);
+
+  _rnavStatus->clearValue();
 }
 
 void
 GPS::update (double delta_time_sec)
 {
   if (!_defaultGPSMode) {
-    // If it's off, don't bother.
+      // If it's off, don't bother.
       // check if value is defined, since many aircraft don't define an output
       // for the GPS, but expect the default one to work.
       bool elecOn = !_electrical_node->hasValue() || _electrical_node->getBoolValue();
-    if (!_serviceable_node->getBoolValue() || !elecOn) {
-      clearOutput();
-      return;
-    }
+      if (!_serviceable_node->getBoolValue() || !elecOn) {
+          clearOutput();
+          return;
+      }
   }
 
   if (delta_time_sec <= 0.0) {
@@ -342,8 +346,7 @@ GPS::update (double delta_time_sec)
         updateCurrentWpNode(_wayptController->position());
       _desiredCourse = getLegMagCourse();
 
-      _gpsNode->setStringValue("rnav-controller-status", _wayptController->status());
-
+      _rnavStatus->setStringValue(_wayptController->status());
       if (_wayptController->isDone()) {
         doSequence();
       }
@@ -406,6 +409,12 @@ void GPS::routeManagerFlightPlanChanged(SGPropertyNode*)
   _route = routeMgr->flightPlan();
   if (_route) {
     _route->addDelegate(this);
+  }
+
+  // once initialised, the delegate decides when to change mode; but the
+  // initial mode selection (from update) still needs to happen
+  if (_config.delegateDoesSequencing() && (_mode != "init")) {
+      return;
   }
 
   if (routeMgr->isRouteActive()) {
@@ -779,41 +788,50 @@ void GPS::driveAutopilot()
   }
 }
 
+void GPS::clearController()
+{
+    _wayptController.reset();
+    _mode.clear();
+    _rnavStatus->clearValue();
+}
+
 void GPS::wp1Changed()
 {
   if (!_currentWaypt)
     return;
 
-  if (_mode == "leg") {
-    _wayptController.reset(WayptController::createForWaypt(this, _currentWaypt));
-    if (_currentWaypt->type() == "hold") {
-      // pass the hold count through
-      auto leg = _route->currentLeg();
-      auto holdCtl = static_cast<flightgear::HoldCtl*>(_wayptController.get());
-      holdCtl->setHoldCount(leg->holdCount());
-    }
+  if (_currentWaypt->type() == "discontinuity") {
+      // we could make a HeadingController here?
+      clearController();
+      return;
+  } else if (_mode == "leg") {
+      _wayptController.reset(WayptController::createForWaypt(this, _currentWaypt));
+      if (_currentWaypt->type() == "hold") {
+          // pass the hold count through
+          auto leg = _route->currentLeg();
+          auto holdCtl = static_cast<flightgear::HoldCtl*>(_wayptController.get());
+          holdCtl->setHoldCount(leg->holdCount());
+      }
   } else if (_mode == "obs") {
-    _wayptController.reset(new OBSController(this, _currentWaypt));
+      _wayptController.reset(new OBSController(this, _currentWaypt));
   } else if (_mode == "dto") {
-    _wayptController.reset(new DirectToController(this, _currentWaypt, _wp0_position));
+      _wayptController.reset(new DirectToController(this, _currentWaypt, _wp0_position));
   }
 
   const bool ok = _wayptController && _wayptController->init();
   if (!ok) {
       SG_LOG(SG_AUTOPILOT, SG_WARN, "GPS failed to init RNAV controller for waypoint " << _currentWaypt->ident());
-      _wayptController.reset();
-      _mode.clear();
-      _gpsNode->setStringValue("rnav-controller-status", "");
+      clearController();
       return;
   }
 
-  _gpsNode->setStringValue("rnav-controller-status", _wayptController->status());
+  _rnavStatus->setStringValue(_wayptController->status());
 
   if (_mode == "obs") {
     _legDistanceNm = -1.0;
   } else {
     _wayptController->update(0.0);
-    _gpsNode->setStringValue("rnav-controller-status", _wayptController->status());
+    _rnavStatus->setStringValue(_wayptController->status());
 
     _legDistanceNm = _wayptController->distanceToWayptM() * SG_METER_TO_NM;
 

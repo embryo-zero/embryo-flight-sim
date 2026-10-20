@@ -27,6 +27,7 @@ class FlightplanTests : public CppUnit::TestFixture
     CPPUNIT_TEST(testLoadSaveMachRestriction);
     CPPUNIT_TEST(testOnlyDiscontinuityRoute);
     CPPUNIT_TEST(testBasicDiscontinuity);
+    CPPUNIT_TEST(testDeleteActiveWaypointBeforeDiscontinuity);
     CPPUNIT_TEST(testLeadingWPDynamic);
     CPPUNIT_TEST(testRadialIntercept);
     CPPUNIT_TEST(testRadialInterceptFromRadialOrigin);
@@ -76,6 +77,7 @@ public:
     void testRoutePathFinalLegVQPR15();
     void testLoadSaveMachRestriction();
     void testBasicDiscontinuity();
+    void testDeleteActiveWaypointBeforeDiscontinuity();
     void testOnlyDiscontinuityRoute();
     void testLeadingWPDynamic();
     void testRadialIntercept();

@@ -216,6 +216,7 @@ private:
 
     /** reset all output properties to default / non-service values */
     void clearOutput();
+    void clearController();
 
     void updateBasicData(double dt);
 
@@ -366,6 +367,8 @@ private:
     SGPropertyNode_ptr _routeDistanceNm;
     SGPropertyNode_ptr _routeETE;
     SGPropertyNode_ptr _desiredCourseNode;
+
+    SGPropertyNode_ptr _rnavStatus;
 
     double _selectedCourse;
     double _desiredCourse;
