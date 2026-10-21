@@ -52,6 +52,7 @@
 #include "main.hxx"
 #include "positioninit.hxx"
 #include "simgear/debug/debug_types.h"
+#include <GUI/new_gui.hxx>
 
 #if FG_HAVE_GPERFTOOLS
 # include <google/profiler.h>
@@ -1186,7 +1187,23 @@ static bool do_reload_nasal_module(const SGPropertyNode* arg, SGPropertyNode*)
         return false;
     }
 
-    return nasalSys->reloadModuleFromFile(arg->getStringValue("module"));
+    const std::string moduleName = arg->getStringValue("module");
+
+    // Open dialogs have Nasal peers and widgets built from the old 'gui' /
+    // 'canvas' code; closing them afterwards would run stale code (and fail),
+    // so close them first and show them again once the new code is loaded.
+    string_list reopenDialogs;
+    auto gui = globals->get_subsystem<NewGUI>();
+    if (gui && ((moduleName == "canvas") || (moduleName == "gui"))) {
+        reopenDialogs = gui->closeAllDialogs();
+    }
+
+    const bool ok = nasalSys->reloadModuleFromFile(moduleName);
+
+    for (const auto& name : reopenDialogs) {
+        gui->showDialog(name);
+    }
+    return ok;
 }
 
 

@@ -20,6 +20,7 @@
 #include <thread>
 #include <vector>
 
+#include "DialogsUriHandler.hxx"
 #include "FlightHistoryUriHandler.hxx"
 #include "HTTPRequest.hxx"
 #include "HTTPResponse.hxx"
@@ -374,6 +375,10 @@ void HttplibHttpd::bind()
         if (!(uri = n->getStringValue("navdb")).empty()) {
             SG_LOG(SG_NETWORK, SG_INFO, "httpd: adding navdb uri handler at " << uri);
             d->uriHandler.push_back(new NavdbUriHandler(uri));
+        }
+        if (!(uri = n->getStringValue("dialogs")).empty()) {
+            SG_LOG(SG_NETWORK, SG_INFO, "httpd: adding dialogs uri handler at " << uri);
+            d->uriHandler.push_back(new DialogsUriHandler(uri));
         }
     }
 

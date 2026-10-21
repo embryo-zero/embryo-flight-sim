@@ -119,6 +119,48 @@ public:
     virtual bool closeDialog (const std::string &name);
 
     /**
+     * Close all open dialogs, returning their names (so they can be shown
+     * again, eg after reloading the Nasal code their peers were built from).
+     */
+    string_list closeAllDialogs();
+
+    /**
+     * Names of the dialogs currently open, in alphabetical order.
+     */
+    string_list openDialogNames() const;
+
+    /**
+     * Names of all dialogs the GUI knows about (open or not), in
+     * alphabetical order. Includes dialogs defined by XML files and those
+     * made via dialog-new.
+     */
+    string_list knownDialogNames() const;
+
+    /**
+     * Is the named dialog currently open?
+     */
+    bool isDialogOpen(const std::string& name) const;
+
+    /**
+     * Path of the XML file which defines a dialog.
+     *
+     * @return the path, or a null path if the dialog is unknown or was
+     * made via dialog-new (no file).
+     */
+    SGPath dialogFilePath(const std::string& name) const;
+
+    /**
+     * Re-read a dialog's XML file from disk, replacing the cached
+     * properties. If the dialog is open it is closed and reopened (keeping
+     * its last position, but not its size). Dialogs without an XML file (made via dialog-new)
+     * are ignored, as are files which fail to parse.
+     *
+     * @param name The name of the dialog box.
+     * @return true if the dialog was reloaded.
+     */
+    bool reloadDialog(const std::string& name);
+
+    /**
      * Get dialog property tree's root node.
      * @param name The name of the dialog box.
      * @return node pointer if the dialog was found, zero otherwise.

@@ -16,6 +16,8 @@
 #include "GUI/NasalItemView.hxx"
 #include "new_gui.hxx"
 
+#include <set>
+
 #include <cstring>
 #include <string>
 
@@ -216,14 +218,8 @@ void NewGUI::setDialogMetadata(const string& name, const SGPath& xmlFilepath,
 void
 NewGUI::reset (bool reload)
 {
-    DialogDict::iterator iter;
-    string_list openDialogs;
     // close all open dialogs and remember them ...
-    for (iter = _active_dialogs.begin(); iter != _active_dialogs.end(); ++iter)
-        openDialogs.push_back(iter->first);
-
-    for (auto d : openDialogs)
-        closeDialog(d);
+    const string_list openDialogs = closeAllDialogs();
 
     // ensure previous menubar is destroyed before creating the
     // new implementation, otherwise macOS/Cocoa is sad.
@@ -249,6 +245,49 @@ NewGUI::reset (bool reload)
     // open dialogs again
     for (auto d : openDialogs)
         showDialog(d);
+}
+
+string_list NewGUI::closeAllDialogs()
+{
+    const string_list openDialogs = openDialogNames();
+    for (const auto& name : openDialogs) {
+        closeDialog(name);
+    }
+    return openDialogs;
+}
+
+string_list NewGUI::openDialogNames() const
+{
+    string_list names;
+    for (const auto& d : _active_dialogs) {
+        names.push_back(d.first);
+    }
+    return names; // std::map, so already sorted
+}
+
+string_list NewGUI::knownDialogNames() const
+{
+    // union of the XML-defined dialogs and the dialog-new ones, which only
+    // have cached properties
+    std::set<string> names;
+    for (const auto& d : _dialog_metadata) {
+        names.insert(d.first);
+    }
+    for (const auto& d : _dialog_props) {
+        names.insert(d.first);
+    }
+    return string_list(names.begin(), names.end());
+}
+
+bool NewGUI::isDialogOpen(const string& name) const
+{
+    return _active_dialogs.find(name) != _active_dialogs.end();
+}
+
+SGPath NewGUI::dialogFilePath(const string& name) const
+{
+    const auto it = _dialog_metadata.find(name);
+    return (it == _dialog_metadata.end()) ? SGPath() : it->second.xmlFilePath;
 }
 
 void
@@ -434,6 +473,56 @@ NewGUI::getDialogProperties (const string &name)
     }
 
     return it->second;
+}
+
+bool NewGUI::reloadDialog(const string& name)
+{
+    const auto metadataIt = _dialog_metadata.find(name);
+    if (metadataIt == _dialog_metadata.end()) {
+        SG_LOG(SG_GENERAL, SG_ALERT, "reloadDialog: dialog '" << name << "' not defined");
+        return false;
+    }
+
+    const SGPath path = metadataIt->second.xmlFilePath;
+    if (path.isNull()) {
+        SG_LOG(SG_GENERAL, SG_INFO, "reloadDialog: dialog '" << name << "' has no XML file (created via dialog-new), ignoring");
+        return false;
+    }
+
+    // parse first, so a broken file leaves the existing dialog untouched
+    SGPropertyNode_ptr newProps = new SGPropertyNode;
+    try {
+        readProperties(path, newProps);
+    } catch (const sg_exception& e) {
+        SG_LOG(SG_INPUT, SG_ALERT, "reloadDialog: error parsing dialog from " << path << "\n"
+                                                                              << e.getFormattedMessage());
+        return false;
+    }
+
+    const bool wasOpen = isDialogOpen(name);
+    if (wasOpen) {
+        // close() records the live geometry into the old props
+        closeDialog(name);
+    }
+
+    // carry the remembered position over to the freshly parsed props. The
+    // size is deliberately dropped: the point of reloading is usually that
+    // the layout changed, and a stale size would hide the new size hints.
+    const auto oldIt = _dialog_props.find(name);
+    if (oldIt != _dialog_props.end() && oldIt->second) {
+        for (const char* key : {"lastx", "lasty"}) {
+            if (oldIt->second->hasValue(key)) {
+                newProps->setIntValue(key, oldIt->second->getIntValue(key));
+            }
+        }
+    }
+
+    _dialog_props[name] = newProps;
+
+    if (wasOpen) {
+        showDialog(name);
+    }
+    return true;
 }
 
 NewGUI::FGDialogRef

@@ -11,6 +11,7 @@ target_sources(fgfsObjects PRIVATE
 	PkgUriHandler.cxx
 	RunUriHandler.cxx
 	MirrorPropertyTreeWebsocket.cxx
+	DialogsUriHandler.cxx
 	NavdbUriHandler.cxx
 	PropertyChangeWebsocket.cxx
 	PropertyChangeObserver.cxx
@@ -25,6 +26,7 @@ target_sources(fgfsObjects PRIVATE
     FlightHistoryUriHandler.hxx
 	PkgUriHandler.hxx
 	RunUriHandler.hxx
+	DialogsUriHandler.hxx
 	NavdbUriHandler.hxx
 	HTTPRequest.hxx
 	Websocket.hxx
