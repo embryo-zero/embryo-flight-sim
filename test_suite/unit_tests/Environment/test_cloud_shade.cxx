@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <Environment/fgclouds.hxx>
+#include <simgear/scene/sky/newcloud.hxx>
 
 namespace {
 
@@ -67,7 +68,7 @@ struct Field {
         snap.voxelOpticalDepth = voxelOpticalDepth;
         snap.sunDirVoxel = sunDir;
         auto result = FGClouds::runShadeRebuild(snap);
-        std::memcpy(shade.data(), result.voxelShadeData->data(), shade.size() * sizeof(float));
+        std::memcpy(shade.data(), result.detailedShadeData->data(), shade.size() * sizeof(float));
     }
 
     int width;
@@ -297,10 +298,10 @@ void CloudShadeTests::testScatteredOverOvercastObliqueSun()
     }
     both.setBlock(stripI, stripI, 1, width - 2, stripK, stripK, 1.0f);
 
-    // Sun at 45 degrees elevation towards +x in voxel space.  The field is
-    // wider than it is tall in voxels, which runShadeRebuild() compensates for
-    // by scaling Z, so the Z component is pre-scaled by height/width here.
-    const osg::Vec3f sunOblique(1.0f, 0.0f, float(height) / float(width));
+    // Sun at 45 degrees elevation towards +x.  The field is not a cube (12 x 12
+    // x 8 voxels), but its voxels are, so the shadow must follow the metric sun
+    // direction.
+    const osg::Vec3f sunOblique(1.0f, 0.0f, 1.0f);
     overcastOnly.rebuild(sunOblique);
     both.rebuild(sunOblique);
 
@@ -318,4 +319,337 @@ void CloudShadeTests::testScatteredOverOvercastObliqueSun()
     both.rebuild(SUN_OVERHEAD);
     CPPUNIT_ASSERT_DOUBLES_EQUAL(1.0, both.sun(stripI, j, OVERCAST_K) - overcastOnly.sun(stripI, j, OVERCAST_K), SUN_TOLERANCE);
     CPPUNIT_ASSERT_DOUBLES_EQUAL(0.0, both.sun(shadowI, j, OVERCAST_K) - overcastOnly.sun(shadowI, j, OVERCAST_K), SUN_TOLERANCE);
+}
+
+namespace {
+
+// A cloud that fills a fixed block of detailed-field voxels, regardless of
+// where it is placed.
+class BlockCloud : public SGVoxelCloud
+{
+public:
+    BlockCloud(int i0, int i1, int k0, int k1)
+        : _i0(i0),
+          _i1(i1),
+          _k0(k0),
+          _k1(k1)
+    {
+    }
+
+    int addCloudToDetailedVoxelField(ImageRef voxelField, float, osg::Vec3f) const override
+    {
+        const int width = voxelField->s();
+        float* raw = reinterpret_cast<float*>(voxelField->data());
+        for (int k = _k0; k <= _k1; ++k) {
+            for (int j = _i0; j <= _i1; ++j) {
+                for (int i = _i0; i <= _i1; ++i) {
+                    float* v = raw + (((size_t)k * width + j) * width + i) * 4;
+                    v[0] = 1.0f; // dimension
+                    v[1] = 1.0f; // type
+                    v[2] = 1.0f; // density
+                }
+            }
+        }
+        return _k1;
+    }
+
+    int addCloudToRoughVoxelField(ImageRef, float, osg::Vec3f) const override { return 0; }
+
+private:
+    int _i0, _i1, _k0, _k1;
+};
+
+const int REBUILD_WIDTH = 16, REBUILD_HEIGHT = 8;
+
+FGClouds::RebuildSnapshot makeRebuildSnapshot(const osg::Vec3f& sunDir)
+{
+    FGClouds::RebuildSnapshot snap;
+    snap.detailedFieldWidth = REBUILD_WIDTH;
+    snap.detailedFieldHeight = REBUILD_HEIGHT;
+    snap.detailedFieldVoxelSize = 200;
+    snap.roughFieldWidth = 1;
+    snap.roughFieldHeight = 1;
+    snap.roughFieldVoxelSize = 1;
+    snap.roughVoxelSizeFactor = 1;
+    snap.voxelOpticalDepth = 1.0f;
+    snap.sdfMaxDistanceVoxels = 8.0f;
+    snap.fieldRepeating = true;
+    snap.cloudbaseM = 0.0f;
+    snap.sunDirVoxel = sunDir;
+    return snap;
+}
+
+// Shade-only rebuild of a field rebuild's detailed voxel data.
+osg::ref_ptr<osg::Image> shadeOnly(const FGClouds::RebuildResult& r, const osg::Vec3f& sunDir)
+{
+    FGClouds::ShadeSnapshot snap;
+    const float* raw = reinterpret_cast<const float*>(r.detailedVoxelData->data());
+    snap.width = r.detailedVoxelData->s();
+    snap.height = r.detailedVoxelData->r();
+    snap.voxelData.assign(raw, raw + (size_t)snap.width * snap.width * snap.height * 4);
+    snap.voxelOpticalDepth = 1.0f;
+    snap.sunDirVoxel = sunDir;
+    return FGClouds::runShadeRebuild(snap).detailedShadeData;
+}
+
+bool sameImageData(const osg::Image* a, const osg::Image* b)
+{
+    return a->s() == b->s() && a->t() == b->t() && a->r() == b->r() &&
+           std::memcmp(a->data(), b->data(), a->getTotalSizeInBytes()) == 0;
+}
+
+float sunAt(const osg::Image* shade, int i, int j, int k)
+{
+    const float* raw = reinterpret_cast<const float*>(shade->data());
+    return raw[(((size_t)k * shade->s() + j) * shade->s() + i) * 4];
+}
+
+} // namespace
+
+void CloudShadeTests::testFieldRebuildIncludesShade()
+{
+    // A wide lower cloud with a narrower one above part of it.
+    const BlockCloud lower(2, 12, 1, 1), upper(4, 6, 4, 5);
+    auto snap = makeRebuildSnapshot(SUN_OVERHEAD);
+    snap.detailedFieldList = {{&lower, osg::Vec3f()}, {&upper, osg::Vec3f()}};
+
+    const FGClouds::RebuildResult r = FGClouds::runRebuild(snap);
+
+    CPPUNIT_ASSERT(r.detailedShadeData.valid());
+    CPPUNIT_ASSERT(sameImageData(r.detailedShadeData.get(), shadeOnly(r, SUN_OVERHEAD).get()));
+
+    // Lower cloud is shadowed by the upper one (2 voxels deep) only beneath it.
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(sunAt(r.detailedShadeData.get(), 10, 10, 1) + 2.0,
+                                 sunAt(r.detailedShadeData.get(), 5, 5, 1), SUN_TOLERANCE);
+}
+
+void CloudShadeTests::testFieldRebuildShadeUsesSnapshotSun()
+{
+    const BlockCloud lower(2, 12, 1, 1), upper(4, 6, 4, 5);
+    const osg::Vec3f sunOblique(1.0f, 0.0f, 1.0f);
+
+    auto overheadSnap = makeRebuildSnapshot(SUN_OVERHEAD);
+    auto obliqueSnap = makeRebuildSnapshot(sunOblique);
+    overheadSnap.detailedFieldList = obliqueSnap.detailedFieldList = {{&lower, osg::Vec3f()}, {&upper, osg::Vec3f()}};
+
+    const FGClouds::RebuildResult overhead = FGClouds::runRebuild(overheadSnap);
+    const FGClouds::RebuildResult oblique = FGClouds::runRebuild(obliqueSnap);
+
+    CPPUNIT_ASSERT(sameImageData(oblique.detailedShadeData.get(), shadeOnly(oblique, sunOblique).get()));
+    CPPUNIT_ASSERT(!sameImageData(oblique.detailedShadeData.get(), overhead.detailedShadeData.get()));
+}
+
+void CloudShadeTests::testEmptyFieldRebuildIncludesShade()
+{
+    const FGClouds::RebuildResult r = FGClouds::runRebuild(makeRebuildSnapshot(SUN_OVERHEAD));
+
+    CPPUNIT_ASSERT(r.detailedShadeData.valid());
+    CPPUNIT_ASSERT_EQUAL(1, r.detailedShadeData->s());
+    const float* shade = reinterpret_cast<const float*>(r.detailedShadeData->data());
+    for (int c = 0; c < 4; ++c) {
+        CPPUNIT_ASSERT_DOUBLES_EQUAL(0.0, shade[c], TOLERANCE);
+    }
+}
+
+void CloudShadeTests::testScatteredOverOvercastLowSun()
+{
+    // Sun at atan(1/3) = 18.4 degrees elevation: a strip 3 voxels above the
+    // overcast casts its shadow 9 voxels away, in a 16 x 16 x 8 field.
+    const int width = 16, height = 8, stripI = 12, stripK = 4, j = 8;
+    Field overcastOnly(width, height), both(width, height);
+    for (Field* f : {&overcastOnly, &both}) {
+        f->setBlock(0, width - 1, 0, width - 1, OVERCAST_K, OVERCAST_K, 1.0f);
+    }
+    both.setBlock(stripI, stripI, 1, width - 2, stripK, stripK, 1.0f);
+
+    const osg::Vec3f sunLow(3.0f, 0.0f, 1.0f);
+    overcastOnly.rebuild(sunLow);
+    both.rebuild(sunLow);
+
+    auto shadowAt = [&](int i) { return both.sun(i, j, OVERCAST_K) - overcastOnly.sun(i, j, OVERCAST_K); };
+    const int shadowI = stripI - 3 * (stripK - OVERCAST_K);
+
+    // The path through the strip at this angle is longer than at 45 degrees.
+    CPPUNIT_ASSERT(shadowAt(shadowI) > 0.8f);
+
+    // Nothing directly beneath the strip, nor where a sun at 4x the true
+    // elevation tangent would put the shadow (under a quarter of the distance).
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(0.0, shadowAt(stripI), SUN_TOLERANCE);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(0.0, shadowAt(stripI - 2), SUN_TOLERANCE);
+}
+
+namespace {
+
+// A cloud that fills a fixed block of rough-field voxels, and nothing in the
+// detailed field.
+class RoughBlockCloud : public SGVoxelCloud
+{
+public:
+    RoughBlockCloud(int i0, int i1, int j0, int j1, int k0, int k1)
+        : _i0(i0),
+          _i1(i1),
+          _j0(j0),
+          _j1(j1),
+          _k0(k0),
+          _k1(k1)
+    {
+    }
+
+    int addCloudToDetailedVoxelField(ImageRef, float, osg::Vec3f) const override { return 0; }
+
+    int addCloudToRoughVoxelField(ImageRef voxelField, float, osg::Vec3f) const override
+    {
+        const int width = voxelField->s();
+        float* raw = reinterpret_cast<float*>(voxelField->data());
+        for (int k = _k0; k <= _k1; ++k)
+            for (int j = _j0; j <= _j1; ++j)
+                for (int i = _i0; i <= _i1; ++i)
+                    raw[(((size_t)k * width + j) * width + i) * 4 + 2] = 1.0f;
+        return _k1;
+    }
+
+private:
+    int _i0, _i1, _j0, _j1, _k0, _k1;
+};
+
+// A 16 x 16 x 8 detailed field inside a 32 x 32 x 4 rough field of voxels twice
+// the size, so the rough field covers 4 times the detailed field's width.
+FGClouds::RebuildSnapshot makeNonRepeatingSnapshot(const osg::Vec3f& sunDir)
+{
+    auto snap = makeRebuildSnapshot(sunDir);
+    snap.fieldRepeating = false;
+    snap.roughVoxelSizeFactor = 2;
+    snap.roughFieldWidth = 32;
+    snap.roughFieldHeight = 4;
+    snap.roughFieldVoxelSize = 400;
+    return snap;
+}
+
+float roughSunAt(const FGClouds::RebuildResult& r, int i, int j, int k)
+{
+    const float* raw = reinterpret_cast<const float*>(r.roughShadeData->data());
+    return raw[(((size_t)k * r.roughShadeData->s() + j) * r.roughShadeData->s() + i) * 4];
+}
+
+} // namespace
+
+void CloudShadeTests::testRepeatingFieldHasEmptyRoughShade()
+{
+    const BlockCloud cloud(4, 6, 1, 2);
+    auto snap = makeRebuildSnapshot(SUN_OVERHEAD);
+    snap.detailedFieldList = {{&cloud, osg::Vec3f()}};
+
+    const FGClouds::RebuildResult r = FGClouds::runRebuild(snap);
+
+    CPPUNIT_ASSERT(r.roughShadeData.valid());
+    CPPUNIT_ASSERT_EQUAL(1, r.roughShadeData->s());
+    const float* shade = reinterpret_cast<const float*>(r.roughShadeData->data());
+    for (int c = 0; c < 4; ++c) {
+        CPPUNIT_ASSERT_DOUBLES_EQUAL(0.0, shade[c], TOLERANCE);
+    }
+}
+
+void CloudShadeTests::testRoughShadeOpticalDepthScale()
+{
+    // One rough voxel deep, so 2 detailed voxels' worth of cloud.
+    const RoughBlockCloud cloud(4, 6, 4, 6, 1, 1);
+    auto snap = makeNonRepeatingSnapshot(SUN_OVERHEAD);
+    snap.roughFieldList = {{&cloud, osg::Vec3f()}};
+
+    const FGClouds::RebuildResult r = FGClouds::runRebuild(snap);
+
+    CPPUNIT_ASSERT_EQUAL(32, r.roughShadeData->s());
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(2.0, roughSunAt(r, 5, 5, 0), SUN_TOLERANCE);
+}
+
+void CloudShadeTests::testRoughCloudShadowsDetailedField()
+{
+    // The detailed field spans rough voxels 12..19.  A rough-only cloud at rough
+    // i = 21..25, k = 1 sits beyond its +x side, about 1.5 detailed voxels above
+    // detailed k = 1 and 8.5 detailed voxels beyond detailed i = 14: a sun at
+    // 10 degrees towards +x passes through it from there.  A cloud the same
+    // distance beyond the -x side is on the wrong side to shadow anything.
+    const RoughBlockCloud sunSide(21, 25, 8, 23, 1, 1), farSide(6, 10, 8, 23, 1, 1);
+    const osg::Vec3f sunLow(8.5f, 0.0f, 1.5f);
+
+    auto withShadow = makeNonRepeatingSnapshot(sunLow);
+    withShadow.roughFieldList = {{&sunSide, osg::Vec3f()}};
+    auto without = makeNonRepeatingSnapshot(sunLow);
+    without.roughFieldList = {{&farSide, osg::Vec3f()}};
+
+    const FGClouds::RebuildResult shadowed = FGClouds::runRebuild(withShadow);
+    const FGClouds::RebuildResult clear = FGClouds::runRebuild(without);
+
+    // The detailed field itself is empty in both, so any sun optical depth in it
+    // comes from the rough field.
+    CPPUNIT_ASSERT(sunAt(shadowed.detailedShadeData.get(), 14, 8, 1) > 0.5f);
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(0.0, sunAt(clear.detailedShadeData.get(), 14, 8, 1), SUN_TOLERANCE);
+}
+
+void CloudShadeTests::testShadeRebuildIncludesRoughField()
+{
+    const RoughBlockCloud roughCloud(21, 25, 8, 23, 1, 1);
+    const BlockCloud detailedCloud(4, 6, 1, 2);
+    const osg::Vec3f sunLow(8.5f, 0.0f, 1.5f);
+    auto snap = makeNonRepeatingSnapshot(sunLow);
+    snap.roughFieldList = {{&roughCloud, osg::Vec3f()}};
+    snap.detailedFieldList = {{&detailedCloud, osg::Vec3f()}};
+
+    const FGClouds::RebuildResult r = FGClouds::runRebuild(snap);
+
+    FGClouds::ShadeSnapshot shadeSnap;
+    const float* raw = reinterpret_cast<const float*>(r.detailedVoxelData->data());
+    shadeSnap.width = r.detailedVoxelData->s();
+    shadeSnap.height = r.detailedVoxelData->r();
+    shadeSnap.voxelData.assign(raw, raw + (size_t)shadeSnap.width * shadeSnap.width * shadeSnap.height * 4);
+    const float* roughRaw = reinterpret_cast<const float*>(r.roughVoxelData->data());
+    shadeSnap.roughWidth = r.roughVoxelData->s();
+    shadeSnap.roughHeight = r.roughVoxelData->r();
+    shadeSnap.roughVoxelSizeFactor = r.roughVoxelSizeFactor;
+    shadeSnap.roughVoxelData.assign(roughRaw, roughRaw + (size_t)shadeSnap.roughWidth * shadeSnap.roughWidth * shadeSnap.roughHeight * 4);
+    shadeSnap.voxelOpticalDepth = 1.0f;
+    shadeSnap.sunDirVoxel = sunLow;
+
+    const FGClouds::ShadeRebuildResult s = FGClouds::runShadeRebuild(shadeSnap);
+
+    CPPUNIT_ASSERT(sameImageData(r.detailedShadeData.get(), s.detailedShadeData.get()));
+    CPPUNIT_ASSERT(sameImageData(r.roughShadeData.get(), s.roughShadeData.get()));
+}
+
+void CloudShadeTests::testSunMarchStopsWhenSaturated()
+{
+    // A 6-voxel-deep column (k = 1..6) with optical depth 1 per voxel.
+    Field f(4, 8);
+    f.setBlock(1, 1, 1, 1, 1, 6, 1.0f);
+    f.rebuild(SUN_OVERHEAD);
+
+    // From k = 3 the ray sees 3.5 (the rest of the column plus the half-voxel
+    // fade at its top) and never saturates.
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(3.5, f.sun(1, 1, 3), SUN_TOLERANCE);
+
+    // From k = 0 it would see 6.0, but stops within one step of passing 5.
+    CPPUNIT_ASSERT(f.sun(1, 1, 0) > 5.0f);
+    CPPUNIT_ASSERT(f.sun(1, 1, 0) <= 5.5f);
+}
+
+void CloudShadeTests::testSaturatedRayIgnoresRoughField()
+{
+    // As in testRoughCloudShadowsDetailedField (the ray from detailed i = 12
+    // also passes through the rough cloud), but with a dense detailed cloud
+    // right next to it on the sun side, which saturates the ray well before
+    // the detailed field's edge.
+    const RoughBlockCloud sunSide(21, 25, 8, 23, 1, 1);
+    const BlockCloud detailedCloud(13, 13, 1, 1);
+    const osg::Vec3f sunLow(8.5f, 0.0f, 1.5f);
+    auto snap = makeNonRepeatingSnapshot(sunLow);
+    snap.voxelOpticalDepth = 10.0f;
+    snap.roughFieldList = {{&sunSide, osg::Vec3f()}};
+    snap.detailedFieldList = {{&detailedCloud, osg::Vec3f()}};
+
+    const FGClouds::RebuildResult r = FGClouds::runRebuild(snap);
+
+    // Saturated, and by no more than one step (half a voxel at 10 per voxel).
+    const float sun = sunAt(r.detailedShadeData.get(), 12, 13, 1);
+    CPPUNIT_ASSERT(sun > 5.0f);
+    CPPUNIT_ASSERT(sun <= 10.0f);
 }

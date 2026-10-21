@@ -682,6 +682,7 @@ FGClouds::RebuildSnapshot FGClouds::captureSnapshot()
 
     snap.centerCart = _centerCart;
     snap.cloudPosMatrix = _cloudPosMatrix;
+    snap.sunDirVoxel = computeSunDirVoxel();
 
     // Take the placement map snapshot under lock - this is the only part
     // that races with addCloud/removeCloud.
@@ -729,6 +730,7 @@ FGClouds::RebuildResult FGClouds::runRebuild(RebuildSnapshot snap)
     result.fieldRepeating = snap.fieldRepeating;
     result.cloudbaseM = snap.cloudbaseM;
     result.centerCart = snap.centerCart;
+    result.sunDirVoxel = snap.sunDirVoxel;
 
     if ((snap.fieldRepeating && snap.detailedFieldList.empty()) ||
         (!snap.fieldRepeating && snap.roughFieldList.empty())) {
@@ -741,6 +743,9 @@ FGClouds::RebuildResult FGClouds::runRebuild(RebuildSnapshot snap)
         SG_LOG(SG_ENVIRONMENT, SG_DEBUG, "rebuildField - No cloud data in range");
         result.detailedVoxelData = dummyVoxelData;
         result.roughVoxelData = dummyVoxelData;
+        result.roughVoxelSizeFactor = snap.roughVoxelSizeFactor;
+        buildFieldShade(reinterpret_cast<const float*>(dummyVoxelData->data()), 1, 1, nullptr, 0, 0, 1,
+                        snap.voxelOpticalDepth, snap.sunDirVoxel, result.detailedShadeData, result.roughShadeData);
         return result;
     }
 
@@ -850,36 +855,140 @@ FGClouds::RebuildResult FGClouds::runRebuild(RebuildSnapshot snap)
         generateSDF(result.roughVoxelData, snap.sdfMaxDistanceVoxels);
     }
 
+    // Shade the new fields here rather than after they are committed, so that they
+    // are never drawn with the previous fields' shade textures.
+    const SGTimeStamp t_shade = SGTimeStamp::now();
+    result.roughVoxelSizeFactor = snap.roughVoxelSizeFactor;
+    buildFieldShade(reinterpret_cast<const float*>(result.detailedVoxelData->data()),
+                    snap.detailedFieldWidth, snap.detailedFieldHeight,
+                    snap.fieldRepeating ? nullptr : reinterpret_cast<const float*>(result.roughVoxelData->data()),
+                    snap.roughFieldWidth, snap.roughFieldHeight, snap.roughVoxelSizeFactor,
+                    snap.voxelOpticalDepth, snap.sunDirVoxel, result.detailedShadeData, result.roughShadeData);
+    SG_LOG(SG_ENVIRONMENT, SG_DEBUG, "Cloud shade texture build took " << (SGTimeStamp::now() - t_shade).toMSecs() << "ms");
+
     SG_LOG(SG_ENVIRONMENT, SG_INFO, "Cloud voxel field rebuild took " << (SGTimeStamp::now() - t_start).toMSecs() << "ms" << " (repeating=" << snap.fieldRepeating << ")");
 
     return result;
 }
 
-// Build the shade texture from the (already-built) detailed voxel field and the
-// current sun direction.  Run independently of runRebuild() above so that it can be
-// re-triggered whenever the sun direction has changed significantly, without having
-// to rebuild the rest of the voxel field.
+// Re-shade the committed voxel fields for the current sun direction, so that the
+// shading can follow the sun without rebuilding the fields themselves.
 FGClouds::ShadeRebuildResult FGClouds::runShadeRebuild(ShadeSnapshot snap)
 {
     ShadeRebuildResult result;
+    buildFieldShade(snap.voxelData.data(), snap.width, snap.height,
+                    snap.roughVoxelData.empty() ? nullptr : snap.roughVoxelData.data(),
+                    snap.roughWidth, snap.roughHeight, snap.roughVoxelSizeFactor,
+                    snap.voxelOpticalDepth, snap.sunDirVoxel, result.detailedShadeData, result.roughShadeData);
+    result.fieldGeneration = snap.fieldGeneration;
+    return result;
+}
 
-    result.voxelShadeData = new osg::Image();
-    result.voxelShadeData->setName("Voxel Shade Data");
-    result.voxelShadeData->setFileName("Voxel Shade Data");
-    result.voxelShadeData->allocateImage(snap.width, snap.width, snap.height, GL_RGBA, GL_FLOAT);
+namespace {
 
-    const float* voxelRaw = snap.voxelData.data();
-    float* shadeRaw = reinterpret_cast<float*>(result.voxelShadeData->data());
+// Trilinear interpolation of one channel of an RGBA float voxel field at a point
+// in voxel coordinates, with voxel centres at integer coordinates.  Returns 0 at
+// and beyond the last voxel centre on each axis.
+float sampleVoxelField(const float* raw, int width, int height, int channel, float px, float py, float pz)
+{
+    if (px < 0.0f || px >= float(width) - 1.0f ||
+        py < 0.0f || py >= float(width) - 1.0f ||
+        pz < 0.0f || pz >= float(height) - 1.0f)
+        return 0.0f;
+
+    int x0 = int(px), y0 = int(py), z0 = int(pz);
+    int x1 = x0 + 1, y1 = y0 + 1, z1 = z0 + 1;
+    float fx = px - x0, fy = py - y0, fz = pz - z0;
+
+    auto d = [&](int x, int y, int z) -> float {
+        return raw[(((size_t)z * width + y) * width + x) * 4 + channel];
+    };
+
+    return (1 - fz) * ((1 - fy) * ((1 - fx) * d(x0, y0, z0) + fx * d(x1, y0, z0)) + fy * ((1 - fx) * d(x0, y1, z0) + fx * d(x1, y1, z0))) +
+           fz * ((1 - fy) * ((1 - fx) * d(x0, y0, z1) + fx * d(x1, y0, z1)) + fy * ((1 - fx) * d(x0, y1, z1) + fx * d(x1, y1, z1)));
+}
+
+// A clear-sky shade texture, for a field that does not exist.
+osg::ref_ptr<osg::Image> makeEmptyShadeImage()
+{
+    osg::ref_ptr<osg::Image> image = new osg::Image();
+    image->setName("Empty Voxel Shade Data");
+    image->allocateImage(1, 1, 1, GL_RGBA, GL_FLOAT);
+    image->setColor(osg::Vec4f(0.0f, 0.0f, 0.0f, 0.0f), 0, 0, 0);
+    return image;
+}
+
+} // namespace
+
+void FGClouds::buildFieldShade(const float* detailedRaw, int detailedWidth, int detailedHeight,
+                               const float* roughRaw, int roughWidth, int roughHeight, int roughVoxelSizeFactor,
+                               float voxelOpticalDepth, const osg::Vec3f& sunDirVoxel,
+                               osg::ref_ptr<osg::Image>& detailedShade, osg::ref_ptr<osg::Image>& roughShade)
+{
+    if (!roughRaw) {
+        roughShade = makeEmptyShadeImage();
+        detailedShade = buildShadeImage(detailedRaw, detailedWidth, detailedHeight, voxelOpticalDepth, sunDirVoxel);
+        return;
+    }
+
+    // Rough voxels are roughVoxelSizeFactor times larger in every dimension, so
+    // each holds that much more optical depth at the same density.
+    roughShade = buildShadeImage(roughRaw, roughWidth, roughHeight,
+                                 voxelOpticalDepth * (float)roughVoxelSizeFactor, sunDirVoxel);
+
+    // Detailed voxel coordinates to rough voxel coordinates.  Both fields share a
+    // centre and vertical extent; the rough field covers fieldScale times the
+    // detailed field's width.
+    const float fieldScale = (float)roughWidth / (float)detailedWidth * (float)roughVoxelSizeFactor;
+    const float* roughShadeRaw = reinterpret_cast<const float*>(roughShade->data());
+    auto beyondDetailed = [=](float px, float py, float pz) -> float {
+        const float u = 0.5f + ((px + 0.5f) / (float)detailedWidth - 0.5f) / fieldScale;
+        const float v = 0.5f + ((py + 0.5f) / (float)detailedWidth - 0.5f) / fieldScale;
+        const float w = (pz + 0.5f) / (float)detailedHeight;
+        return sampleVoxelField(roughShadeRaw, roughWidth, roughHeight, 0,
+                                u * roughWidth - 0.5f, v * roughWidth - 0.5f, w * roughHeight - 0.5f);
+    };
+
+    // The rough sun optical depth is zero from one rough voxel above the highest
+    // rough level where it is non-zero; in detailed voxel coordinates that is:
+    int roughTopK = -1;
+    for (int k = roughHeight - 1; k >= 0 && roughTopK < 0; --k) {
+        const float* level = roughShadeRaw + (size_t)k * roughWidth * roughWidth * 4;
+        for (size_t v = 0; v < (size_t)roughWidth * roughWidth; ++v) {
+            if (level[v * 4] > 0.0f) {
+                roughTopK = k;
+                break;
+            }
+        }
+    }
+    const float beyondTopZ = (float(roughTopK + 1) + 0.5f) / (float)roughHeight * (float)detailedHeight - 0.5f;
+
+    detailedShade = buildShadeImage(detailedRaw, detailedWidth, detailedHeight, voxelOpticalDepth, sunDirVoxel,
+                                    beyondDetailed, beyondTopZ);
+}
+
+// Build the shade texture for a detailed voxel field and sun direction.
+osg::ref_ptr<osg::Image> FGClouds::buildShadeImage(const float* voxelRaw, int width, int height,
+                                                   float voxelOpticalDepth, const osg::Vec3f& sunDirVoxel,
+                                                   const std::function<float(float, float, float)>& beyondField,
+                                                   float beyondTopZ)
+{
+    osg::ref_ptr<osg::Image> shadeImage = new osg::Image();
+    shadeImage->setName("Voxel Shade Data");
+    shadeImage->setFileName("Voxel Shade Data");
+    shadeImage->allocateImage(width, width, height, GL_RGBA, GL_FLOAT);
+
+    float* shadeRaw = reinterpret_cast<float*>(shadeImage->data());
 
     // Zero the output
-    const size_t numFloats = (size_t)snap.width * snap.width * snap.height * 4;
+    const size_t numFloats = (size_t)width * width * height * 4;
     std::fill(shadeRaw, shadeRaw + numFloats, 0.0f);
 
-    SG_LOG(SG_ENVIRONMENT, SG_DEBUG, "Sun Direction Z-Up: " << snap.sunDirVoxel.x() << ", " << snap.sunDirVoxel.y() << ", " << snap.sunDirVoxel.z());
+    SG_LOG(SG_ENVIRONMENT, SG_DEBUG, "Sun Direction Z-Up: " << sunDirVoxel.x() << ", " << sunDirVoxel.y() << ", " << sunDirVoxel.z());
 
-    // sunDirVoxel Z needs to be scaled up because the voxel space is not a cube.
-    osg::Vec3f marchDir = snap.sunDirVoxel;
-    marchDir.z() = marchDir.z() * (float)snap.width / (float)snap.height;
+    // Voxels are cubes, so the march in voxel-index units follows the metric sun
+    // direction unchanged, whatever the field's overall proportions.
+    osg::Vec3f marchDir = sunDirVoxel;
     const float marchDirLength = marchDir.normalize();
 
     // Protect against a tight loop if sun direction is not valid.
@@ -889,34 +998,42 @@ FGClouds::ShadeRebuildResult FGClouds::runShadeRebuild(ShadeSnapshot snap)
     const float STEP_SIZE = 0.5f;
     const osg::Vec3f step = marchDir * STEP_SIZE;
 
-    // Trilinear interpolation of density from the voxel field.
-    // p is in voxel coordinates [0..width) x [0..width) x [0..height).
-    // Returns 0 outside the field.
+    // Sun optical depth beyond which a voxel is fully shadowed (transmittance
+    // below 1%), so the march stops there.  Matches MAX_CLOUD_DENSITY in
+    // cloudquad.frag, which treats stored values above it the same way.
+    const float MAX_SUN_OPTICAL_DEPTH = 5.0f;
+
+    // Density, with no density outside the field.
     auto sampleDensity = [&](float px, float py, float pz) -> float {
-        // Clamp-to-border: outside field = no density
-        if (px < 0.0f || px >= float(snap.width) - 1.0f ||
-            py < 0.0f || py >= float(snap.width) - 1.0f ||
-            pz < 0.0f || pz >= float(snap.height) - 1.0f)
-            return 0.0f;
-
-        int x0 = int(px), y0 = int(py), z0 = int(pz);
-        int x1 = x0 + 1, y1 = y0 + 1, z1 = z0 + 1;
-        float fx = px - x0, fy = py - y0, fz = pz - z0;
-
-        auto d = [&](int x, int y, int z) -> float {
-            return voxelRaw[(z * snap.width * snap.width + y * snap.width + x) * 4 + 2];
-        };
-
-        // Trilinear interpolation
-        return (1 - fz) * ((1 - fy) * ((1 - fx) * d(x0, y0, z0) + fx * d(x1, y0, z0)) + fy * ((1 - fx) * d(x0, y1, z0) + fx * d(x1, y1, z0))) +
-               fz * ((1 - fy) * ((1 - fx) * d(x0, y0, z1) + fx * d(x1, y0, z1)) + fy * ((1 - fx) * d(x0, y1, z1) + fx * d(x1, y1, z1)));
+        return sampleVoxelField(voxelRaw, width, height, 2, px, py, pz);
     };
 
+    // Interpolated density is zero from one voxel above the highest level with any
+    // cloud.  A sun ray climbing above that, and above where beyondField can be
+    // non-zero, has nothing more to collect, so it stops there; one starting there
+    // needs no march at all.  Most of a field is clear air above the clouds, and at
+    // low sun these rays would otherwise cross much of the field.
+    int topCloudK = -1;
+    for (int k = height - 1; k >= 0 && topCloudK < 0; --k) {
+        const float* level = voxelRaw + (size_t)k * width * width * 4;
+        for (size_t v = 0; v < (size_t)width * width; ++v) {
+            if (level[v * 4 + 2] > 0.0f) {
+                topCloudK = k;
+                break;
+            }
+        }
+    }
+
+    // The highest cloud may also be in the Rough field
+    const float clearAboveZ = std::max(float(topCloudK + 1), beyondField ? beyondTopZ : 0.0f);
+    const bool sunAbove = marchDir.z() > 0.0f;
+
     // For each voxel, ray-march toward the sun accumulating optical depth
-    for (int k = 0; k < snap.height; ++k) {
-        for (int j = 0; j < snap.width; ++j) {
-            for (int i = 0; i < snap.width; ++i) {
+    for (int k = 0; k < height; ++k) {
+        for (int j = 0; j < width; ++j) {
+            for (int i = 0; i < width; ++i) {
                 float sunOpticalDepth = 0.0f;
+                bool saturated = false;
 
                 // Start half a step above this voxel (avoid self-shadowing)
                 float px = float(i) + step.x() * 0.5f;
@@ -924,26 +1041,38 @@ FGClouds::ShadeRebuildResult FGClouds::runShadeRebuild(ShadeSnapshot snap)
                 float pz = float(k) + step.z() * 0.5f;
 
                 while (haveValidSunDir &&
-                       px >= 0.0f && px < float(snap.width) &&
-                       py >= 0.0f && py < float(snap.width) &&
-                       pz >= 0.0f && pz < float(snap.height)) {
+                       px >= 0.0f && px < float(width) &&
+                       py >= 0.0f && py < float(width) &&
+                       pz >= 0.0f && pz < float(height) &&
+                       !(sunAbove && pz >= clearAboveZ)) {
                     float density = sampleDensity(px, py, pz);
-                    sunOpticalDepth += density * snap.voxelOpticalDepth * STEP_SIZE;
+                    sunOpticalDepth += density * voxelOpticalDepth * STEP_SIZE;
+                    if (sunOpticalDepth > MAX_SUN_OPTICAL_DEPTH) {
+                        saturated = true;
+                        break;
+                    }
 
                     px += step.x();
                     py += step.y();
                     pz += step.z();
                 }
 
-                const int idx = (k * snap.width * snap.width + j * snap.width + i) * 4;
+                // Carry on beyond the field if the ray left through a side.
+                const bool leftThroughSide = px < 0.0f || px >= float(width) || py < 0.0f || py >= float(width);
+                if (beyondField && haveValidSunDir && !saturated && leftThroughSide &&
+                    pz >= 0.0f && pz < float(height)) {
+                    sunOpticalDepth += beyondField(px, py, pz);
+                }
+
+                const int idx = (k * width * width + j * width + i) * 4;
                 shadeRaw[idx + 0] = sunOpticalDepth;
             }
         }
     }
 
-    computeColumnShadeChannels(voxelRaw, shadeRaw, snap.width, snap.height, snap.voxelOpticalDepth);
+    computeColumnShadeChannels(voxelRaw, shadeRaw, width, height, voxelOpticalDepth);
 
-    return result;
+    return shadeImage;
 }
 
 // Fill the sun-independent, per-column channels of the shade texture from the
@@ -1076,9 +1205,20 @@ void FGClouds::commitResult(RebuildResult result)
     _roughVoxelData = result.roughVoxelData;
     _windOffsetData = result.windOffsetData;
 
-    // Push them into the textures
-    simgear::StateAttributeFactory::instance()->setCloudVoxelImages(_detailedVoxelData, _roughVoxelData, result.fieldRepeating);
-    simgear::StateAttributeFactory::instance()->setCloudWindOffsetImage(_windOffsetData);
+    _detailedShadeData = result.detailedShadeData;
+    _roughShadeData = result.roughShadeData;
+    _committedRoughField = !result.fieldRepeating;
+    _committedRoughVoxelSizeFactor = result.roughVoxelSizeFactor;
+    _lastShadeSunDir = result.sunDirVoxel;
+    ++_fieldGeneration;
+
+    // Push the Voxel data and Share images together, so the field and its shading change
+    // in the same frame.
+    auto* factory = simgear::StateAttributeFactory::instance();
+    factory->setCloudVoxelImages(_detailedVoxelData, _roughVoxelData, result.fieldRepeating);
+    factory->setCloudDetailedShadeImage(_detailedShadeData);
+    factory->setCloudRoughShadeImage(_roughShadeData);
+    factory->setCloudWindOffsetImage(_windOffsetData);
 }
 
 FGClouds::ShadeSnapshot FGClouds::captureShadeSnapshot()
@@ -1096,16 +1236,35 @@ FGClouds::ShadeSnapshot FGClouds::captureShadeSnapshot()
     const size_t numFloats = (size_t)snap.width * (size_t)snap.width * (size_t)snap.height * 4;
     snap.voxelData.assign(voxelRaw, voxelRaw + numFloats);
 
+    if (_committedRoughField && _roughVoxelData) {
+        snap.roughWidth = _roughVoxelData->s();
+        snap.roughHeight = _roughVoxelData->r();
+        snap.roughVoxelSizeFactor = _committedRoughVoxelSizeFactor;
+        const float* roughRaw = reinterpret_cast<const float*>(_roughVoxelData->data());
+        snap.roughVoxelData.assign(roughRaw, roughRaw + (size_t)snap.roughWidth * snap.roughWidth * snap.roughHeight * 4);
+    }
+
     auto cloudsProp = globals->get_props()->getNode("/sim/rendering/hdr/clouds/");
     snap.voxelOpticalDepth = cloudsProp->getFloatValue("voxel-optical-depth", 2.5);
     snap.sunDirVoxel = computeSunDirVoxel();
+    snap.fieldGeneration = _fieldGeneration;
     return snap;
 }
 
 void FGClouds::commitShadeResult(ShadeRebuildResult result)
 {
-    _voxelShadeData = result.voxelShadeData;
-    simgear::StateAttributeFactory::instance()->setCloudShadeImage(_voxelShadeData);
+    // Built from a field that has since been replaced, which will have brought its own
+    // shade texture with it.
+    if (result.fieldGeneration != _fieldGeneration) {
+        SG_LOG(SG_ENVIRONMENT, SG_DEBUG, "Discarding shade texture for superseded cloud field");
+        return;
+    }
+
+    _detailedShadeData = result.detailedShadeData;
+    _roughShadeData = result.roughShadeData;
+    auto* factory = simgear::StateAttributeFactory::instance();
+    factory->setCloudDetailedShadeImage(_detailedShadeData);
+    factory->setCloudRoughShadeImage(_roughShadeData);
 }
 
 void FGClouds::generateSDF(osg::ref_ptr<osg::Image> voxelImage, float maxDistanceVoxels)
@@ -1201,15 +1360,13 @@ void FGClouds::updateWindColumn(double dt, FGEnvironment* env)
 
 void FGClouds::updateFromOsgTraversal()
 {
-    bool shadeDirty = false;
-
-    // Poll for a completed background rebuild first
+    // Poll for a completed background rebuild first.  This commits the field
+    // and its shade texture together.
     if (_rebuildFuture.valid() &&
         _rebuildFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         commitResult(_rebuildFuture.get()); // non-blocking — already done
         // Don't clear _fieldDirty here; a new mutation may have arrived
         // while the last rebuild was in flight — see below.
-        shadeDirty = true;
     }
 
     // Launch a new rebuild if dirty and nothing is running
@@ -1227,10 +1384,11 @@ void FGClouds::updateFromOsgTraversal()
         commitShadeResult(_shadeRebuildFuture.get()); // non-blocking — already done
     }
 
-    // Mark the shade texture dirty if the sun has moved more than the configured
-    // threshold since the last shade build. This lets the shade texture
+    // Re-shade the committed field if the sun has moved more than the configured
+    // threshold since its shade texture was built. This lets the shade texture
     // track the sun (e.g. time-of-day changes) independently of cloud rebuilds.
-    if (_detailedVoxelData && !shadeDirty) {
+    bool shadeDirty = false;
+    if (_detailedVoxelData) {
         const osg::Vec3f sunDirVoxel = computeSunDirVoxel();
         const float cosAngle = sunDirVoxel * _lastShadeSunDir;
         const float thresholdDeg = _shadeUpdateAngleDeg;

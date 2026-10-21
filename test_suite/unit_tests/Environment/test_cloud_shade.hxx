@@ -1,5 +1,6 @@
 // test_cloud_shade.hxx - unit tests for the voxel cloud shade texture
-// (FGClouds::runShadeRebuild() and FGClouds::computeColumnShadeChannels()).
+// (FGClouds::runRebuild(), FGClouds::runShadeRebuild() and
+// FGClouds::computeColumnShadeChannels()).
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 // SPDX-FileCopyrightText: 2026 Stuart Buchanan
@@ -23,6 +24,16 @@ class CloudShadeTests : public CppUnit::TestFixture
     CPPUNIT_TEST(testScatteredOverOvercastSunShadow);
     CPPUNIT_TEST(testScatteredOverOvercastColumnChannels);
     CPPUNIT_TEST(testScatteredOverOvercastObliqueSun);
+    CPPUNIT_TEST(testScatteredOverOvercastLowSun);
+    CPPUNIT_TEST(testFieldRebuildIncludesShade);
+    CPPUNIT_TEST(testFieldRebuildShadeUsesSnapshotSun);
+    CPPUNIT_TEST(testEmptyFieldRebuildIncludesShade);
+    CPPUNIT_TEST(testRepeatingFieldHasEmptyRoughShade);
+    CPPUNIT_TEST(testRoughShadeOpticalDepthScale);
+    CPPUNIT_TEST(testRoughCloudShadowsDetailedField);
+    CPPUNIT_TEST(testShadeRebuildIncludesRoughField);
+    CPPUNIT_TEST(testSunMarchStopsWhenSaturated);
+    CPPUNIT_TEST(testSaturatedRayIgnoresRoughField);
     CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -73,4 +84,45 @@ public:
     // overcast offset towards the sun's azimuth by the layers' vertical
     // separation, not directly beneath it.
     void testScatteredOverOvercastObliqueSun();
+
+    // With a low sun (18.4 degrees), the shadow falls three times the layers'
+    // vertical separation away, following the true sun elevation.
+    void testScatteredOverOvercastLowSun();
+
+    // A field rebuild returns the shade texture for the field it built, so the
+    // two can be committed together: it matches a shade-only rebuild of the new
+    // field, and already contains the upper cloud's shadow on the lower one.
+    void testFieldRebuildIncludesShade();
+
+    // The field rebuild shades with the sun direction captured in its snapshot.
+    void testFieldRebuildShadeUsesSnapshotSun();
+
+    // A rebuild with no clouds in range still returns a (clear-sky) shade
+    // texture, replacing any previous field's shading.
+    void testEmptyFieldRebuildIncludesShade();
+
+    // A repeating field has no rough field, so its rough shade texture is a
+    // single clear-sky voxel.
+    void testRepeatingFieldHasEmptyRoughShade();
+
+    // Rough voxels are larger than detailed ones by the rough voxel size
+    // factor, so they hold that much more optical depth at the same density.
+    void testRoughShadeOpticalDepthScale();
+
+    // A sun ray leaving the detailed field through its side carries on through
+    // the rough field, so a cloud only in the rough field shadows the detailed
+    // field at low sun.
+    void testRoughCloudShadowsDetailedField();
+
+    // A shade-only rebuild of a non-repeating field rebuilds both shade
+    // textures, matching those from the field rebuild.
+    void testShadeRebuildIncludesRoughField();
+
+    // The sun march stops once a voxel is fully shadowed (optical depth over
+    // 5), leaving unsaturated voxels exact.
+    void testSunMarchStopsWhenSaturated();
+
+    // A detailed sun ray that saturates inside the detailed field does not
+    // also pick up the rough field's shade, as it never reached the edge.
+    void testSaturatedRayIgnoresRoughField();
 };
