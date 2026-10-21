@@ -150,6 +150,14 @@ FGPUICompatDialog::~FGPUICompatDialog()
     // nothing to do, all work was done in close()
 }
 
+int FGPUICompatDialog::getCanvasIndex()
+{
+    if (!_peer) {
+        return -1;
+    }
+    return _peer->callMethod<int>("canvasIndex");
+}
+
 void FGPUICompatDialog::close()
 {
     if (_peer) {

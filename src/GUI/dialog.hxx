@@ -1,5 +1,6 @@
 // dialog.hxx - XML-configured dialog box.
 // SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-FileCopyrightText: 2002 David Megginson
 
 #pragma once
 
@@ -64,6 +65,12 @@ public:
     virtual void bringToFront() {}
 
     /**
+     * @brief Index of the Canvas (in /canvas/by-index) which renders this
+     * dialog's contents, or -1 if the dialog has no canvas.
+     */
+    virtual int getCanvasIndex() { return -1; }
+
+    /**
      * @brief Close the dialog. This should actually close the GUI
      * assets associated, if you want an 'are you sure?' interaction, it
      * needs to be handled in advance of this interaction.
@@ -114,7 +121,7 @@ protected:
      * @param translationDomain domain used to fetch translations of dialog
      *                          elements such as labels
      *
-     * The @p translationDomain may be overwridden from @p props.
+     * The @p translationDomain may be overridden from @p props.
      */
     FGDialog(SGPropertyNode* props, std::string translationDomain = "core");
 

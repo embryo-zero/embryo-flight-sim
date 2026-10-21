@@ -1,4 +1,6 @@
 // dialog.cxx: implementation of an XML-configurable dialog box.
+// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-FileCopyrightText: 2002 David Megginson
 
 #include "config.h"
 

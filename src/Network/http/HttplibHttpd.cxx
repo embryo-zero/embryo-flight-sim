@@ -282,7 +282,13 @@ public:
                 connection->beginPollIteration(&sink);
                 bool pollDone = handlerRef->poll(connection.get());
                 if (!connection->sinkWriteOk()) return false; // client disconnected
-                if (pollDone) return false;                   // finished, stop the stream
+                if (pollDone) {
+                    // Finished. Only done() terminates a chunked body (a
+                    // zero-length write is ignored, and returning false means
+                    // 'canceled' and drops the connection, breaking keep-alive).
+                    sink.done();
+                    return true; // the stream loop exits since done() was called
+                }
                 if (connection->bytesWrittenThisCall() == 0) {
                     // Nothing to send yet -- avoid busy-waiting the worker thread.
                     std::this_thread::sleep_for(std::chrono::milliseconds(15));

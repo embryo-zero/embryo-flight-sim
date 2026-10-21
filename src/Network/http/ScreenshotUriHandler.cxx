@@ -4,21 +4,8 @@
 // osg support written by James Turner
 // Ported to new httpd infrastructure by Torsten Dreyer
 //
-// Copyright (C) 2014  Torsten Dreyer
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation; either version 2 of the
-// License, or (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-FileCopyrightText: 2014 Torsen Dreyer
 
 #include "ScreenshotUriHandler.hxx"
 
@@ -28,6 +15,8 @@
 #include <osgViewer/Viewer>
 
 #include <Canvas/canvas_mgr.hxx>
+#include <GUI/dialog.hxx>
+#include <GUI/new_gui.hxx>
 #include <simgear/canvas/Canvas.hxx>
 
 #include <simgear/threads/SGQueue.hxx>
@@ -35,6 +24,7 @@
 #include <Main/globals.hxx>
 #include <Viewer/renderer.hxx>
 
+#include <atomic>
 #include <queue>
 
 using std::string;
@@ -59,6 +49,8 @@ public:
 class StringReadyListener {
 public:
   virtual void stringReady(const std::string &) = 0;
+  // called instead of stringReady if the image could not be compressed
+  virtual void stringFailed() {}
   virtual ~StringReadyListener()
   {
   }
@@ -116,8 +108,16 @@ void ImageCompressor::run()
     if ( NULL != task.stringReadyListener) {
       SG_LOG(SG_NETWORK, SG_DEBUG, "ImageCompressor checking for writer for " << task.format);
       osgDB::ReaderWriter* writer = osgDB::Registry::instance()->getReaderWriterForExtension(task.format);
-      if (!writer)
-      continue;
+      if (!writer) {
+          task.stringReadyListener->stringFailed();
+          continue;
+      }
+
+      if (!task.image) {
+          SG_LOG(SG_NETWORK, SG_DEV_WARN, "ImageCOmpressor passed NULL image-ref");
+          task.stringReadyListener->stringFailed();
+          continue;
+      }
 
       SG_LOG(SG_NETWORK, SG_DEBUG, "ImageCompressor compressing to " << task.format);
       std::stringstream outputStream;
@@ -127,6 +127,9 @@ void ImageCompressor::run()
       if (wr.success()) {
         SG_LOG(SG_NETWORK, SG_DEBUG, "ImageCompressor compressed to  " << task.format);
         task.stringReadyListener->stringReady(outputStream.str());
+      } else {
+          SG_LOG(SG_NETWORK, SG_WARN, "ImageCompressor: failed to write " << task.format << " image (" << task.image->s() << "x" << task.image->t() << ", pixel format 0x" << std::hex << task.image->getPixelFormat() << std::dec << "): " << wr.message());
+          task.stringReadyListener->stringFailed();
       }
       SG_LOG(SG_NETWORK, SG_DEBUG, "ImageCompressor done for this image" << task.format);
     }
@@ -336,7 +339,9 @@ private:
  */
 class CanvasImageRequest : public ConnectionData, public simgear::canvas::CanvasImageReadyListener, StringReadyListener {
 public:
-    ImageCompressionTask *currenttask=NULL;
+    // true while an image handed to the compressor thread hasn't been
+    // completed (or failed) yet
+    std::atomic<bool> compressing{false};
     sc::CanvasPtr canvas;
     int connected = 0;
 
@@ -374,7 +379,7 @@ public:
     // Assumption: when unsubscribe returns,there might just be a compressor thread running,
     // causing a crash when the deconstructor finishes. Rare, but might happen. Just wait to be sure.
     virtual ~CanvasImageRequest() {
-        if (currenttask){
+        if (compressing) {
             SG_LOG(SG_NETWORK, SG_ALERT, "CanvasImage: task running, pausing for 15 seconds");
             SGTimeStamp::sleepFor(SGTimeStamp::fromSec(15));
         }
@@ -384,11 +389,12 @@ public:
         }
     }
 
-    virtual void imageReady(osg::ref_ptr<osg::Image> rawImage) {
+    void imageReady(osg::ref_ptr<osg::Image> rawImage) override
+    {
         SG_LOG(SG_NETWORK, SG_DEBUG, "CanvasImage:imageReady");
         // called from a rendering thread, not from the main loop
         ImageCompressionTask task;
-        currenttask = &task;
+        compressing = true;
         task.image = rawImage;
         task.format = _type;
         task.stringReadyListener = this;
@@ -401,14 +407,20 @@ public:
 
     mutable OpenThreads::Mutex _lock;
 
-    virtual void stringReady(const string & s) {
+    void stringReady(const string& s) override
+    {
         SG_LOG(SG_NETWORK, SG_DEBUG, "CanvasImage:stringReady");
 
         // called from the compressor thread
         OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_lock);
         _compressedData = s;
         // allow destructor
-        currenttask = NULL;
+        compressing = false;
+    }
+
+    void stringFailed() override
+    {
+        compressing = false;
     }
 
     string getCanvasImage() {
@@ -467,6 +479,23 @@ bool ScreenshotUriHandler::handleGetRequest(const HTTPRequest & request, HTTPRes
   int canvasindex = -1;
   string s_canvasindex = request.RequestVariables.get("canvasindex");
   if (!s_canvasindex.empty()) canvasindex = atoi(s_canvasindex.c_str());
+
+  // 'dialog' takes precedence over 'canvasindex': resolve the named dialog
+  // to the canvas which renders it
+  const string dialogName = request.RequestVariables.get("dialog");
+  if (!dialogName.empty()) {
+      auto gui = globals->get_subsystem<NewGUI>();
+      FGDialog* dialog = gui ? gui->getDialog(dialogName) : nullptr;
+      canvasindex = dialog ? dialog->getCanvasIndex() : -1;
+      if (canvasindex < 0) {
+          response.Header["Content-Type"] = "text/plain";
+          response.StatusCode = 404;
+          response.Content = "Dialog not found, not open, or has no canvas: " + dialogName;
+          return true;
+      }
+  }
+
+  SG_LOG(SG_NETWORK, SG_DEBUG, "screenshot request: dialog='" << dialogName << "' canvasindex=" << canvasindex << " type=" << type);
 
   SGSharedPtr<ScreenshotRequest> screenshotRequest;
   SGSharedPtr<CanvasImageRequest> canvasimageRequest;
@@ -558,7 +587,7 @@ bool ScreenshotUriHandler::poll(Connection * connection)
 
   const string & canvasimage = canvasimageRequest->getCanvasImage();
   if (canvasimage.empty()) {
-      SG_LOG(SG_NETWORK, SG_INFO, "No canvasimage available.");
+      SG_LOG(SG_NETWORK, SG_BULK, "No canvasimage available.");
       return false; // not ready yet, call again.
   }
 
@@ -578,9 +607,9 @@ bool ScreenshotUriHandler::poll(Connection * connection)
       return false;
   }
 
-  // single canvasimage, send terminating chunk
+  SG_LOG(SG_NETWORK, SG_DEBUG, "screenshot request: sent " << canvasimage.size() << " bytes");
+  // single canvasimage: done (the httpd terminates the response)
   connection->remove(KEY_CANVASIMAGE);
-  connection->write("", 0);
   return true; // done.
 }
 

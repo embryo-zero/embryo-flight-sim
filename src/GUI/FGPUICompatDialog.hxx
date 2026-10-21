@@ -105,6 +105,7 @@ public:
 
     virtual const char* getName();
     virtual void bringToFront();
+    int getCanvasIndex() override;
 
     std::string nameString() const;
     std::string nasalModule() const;
