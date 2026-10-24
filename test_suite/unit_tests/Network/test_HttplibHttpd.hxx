@@ -37,6 +37,7 @@ class HttplibHttpdTests : public CppUnit::TestFixture
     CPPUNIT_TEST(testFlightHistoryHandler);
     CPPUNIT_TEST(testPropertyListenerWebsocket);
     CPPUNIT_TEST(testPropertyTreeMirrorWebsocket);
+    CPPUNIT_TEST(testShutdownWithOpenWebsocket);
     CPPUNIT_TEST(testDefaultsToLoopback);
     CPPUNIT_TEST_SUITE_END();
 
@@ -82,6 +83,9 @@ public:
     // Connect to /PropertyTreeMirror/<path> and receive the initial
     // subtree snapshot, then a change notification.
     void testPropertyTreeMirrorWebsocket();
+    // Shutting down with a WebSocket client still connected (e.g. a Phi
+    // tab) must close the connection rather than wait for the client.
+    void testShutdownWithOpenWebsocket();
     // With no listening-address configured, the server must default to
     // loopback-only.
     void testDefaultsToLoopback();

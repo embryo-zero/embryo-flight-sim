@@ -22,6 +22,7 @@
 
 #include <chrono>
 #include <fstream>
+#include <future>
 #include <thread>
 
 using nlohmann::json;
@@ -109,6 +110,8 @@ void HttplibHttpdTests::setUp()
     _updatePumpThread = std::thread([this] {
         while (!_stopUpdatePump.load()) {
             globals->get_event_mgr()->update(0.005);
+            // Drives websocket polling, as the subsystem manager does in the real app.
+            _httpd->update(0.005);
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
     });
@@ -317,7 +320,7 @@ void HttplibHttpdTests::testPropertyListenerWebsocket()
     // /sim/time/elapsed-sec. Nothing advances that outside a real main
     // loop -- TimeManager needs more than just being added to the
     // subsystem manager to actually tick it -- so bump it directly; the
-    // connection's own poll thread (ticking in real time, independently
+    // update pump thread (ticking in real time, independently
     // of this call) picks up the new value on its next iteration.
     fgSetDouble("/sim/time/elapsed-sec", fgGetDouble("/sim/time/elapsed-sec") + 1.0);
 
@@ -328,6 +331,34 @@ void HttplibHttpdTests::testPropertyListenerWebsocket()
     auto j = json::parse(msg);
     CPPUNIT_ASSERT_EQUAL(std::string("/test/http/watched"), j.at("path").get<std::string>());
     CPPUNIT_ASSERT_EQUAL(std::string("after"), j.at("value").get<std::string>());
+}
+
+void HttplibHttpdTests::testShutdownWithOpenWebsocket()
+{
+    httplib::ws::WebSocketClient ws("ws://127.0.0.1:" + std::to_string(_port) + "/PropertyListener");
+    // Longer than the wait below, so only the server closing can end the read loop.
+    ws.set_read_timeout(30, 0);
+    CPPUNIT_ASSERT(ws.connect());
+
+    // Keep reading like a browser does, which answers the server's Close frame.
+    std::thread reader([&ws] {
+        std::string msg;
+        while (ws.read(msg) != httplib::ws::ReadResult::Fail) {
+        }
+    });
+    // Let the server reach its read loop.
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    auto shutdown = std::async(std::launch::async, [this] { _httpd->unbind(); });
+    const bool stopped = shutdown.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
+    if (!stopped) {
+        // Unblock the server so a failure doesn't hang the test suite.
+        ws.close();
+    }
+    shutdown.wait();
+    reader.join();
+
+    CPPUNIT_ASSERT(stopped);
 }
 
 void HttplibHttpdTests::testPropertyTreeMirrorWebsocket()

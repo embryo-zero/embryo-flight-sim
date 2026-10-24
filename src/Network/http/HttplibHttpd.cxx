@@ -7,7 +7,6 @@
 
 #include "HttplibHttpd.hxx"
 
-#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdlib>
@@ -16,6 +15,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -194,7 +194,20 @@ public:
     {
         if (listenThread.joinable()) {
             server.stop();
+            // Shutting down joins the server's worker threads, so each open
+            // WebSocket's read loop must be ended first.
+            closeWebsockets();
             listenThread.join();
+        }
+    }
+
+    void closeWebsockets()
+    {
+        std::lock_guard<std::mutex> lock(websocketsMutex);
+        stopping = true;
+        for (auto* conn : openWebsockets) {
+            // The client's echoed Close frame ends the blocked read() in runWebsocket()
+            conn->ws.close(httplib::ws::CloseStatus::GoingAway, "FlightGear shutting down");
         }
     }
 
@@ -298,26 +311,32 @@ public:
         return httplib::Server::HandlerResponse::Handled;
     }
 
+    // Polls every open WebSocket; called from HttplibHttpd::update() on the
+    // main thread. Holds the global mutex, so a connection can't be
+    // unregistered (and its Websocket destroyed) mid-poll.
+    void pollWebsockets()
+    {
+        std::lock_guard<std::mutex> lock(websocketsMutex);
+        for (auto* conn : openWebsockets) {
+            if (conn->ws.is_open()) conn->websocket->poll(conn->writer);
+        }
+    }
+
     // Runs one WebSocket connection's whole lifetime. httplib gives each
-    // WebSocket connection its own dedicated, blocking thread;
-    // that thread here becomes
-    // the inbound-message read loop. A second, connection-local thread
-    // periodically calls poll()
+    // WebSocket connection its own dedicated, blocking thread; that thread
+    // here becomes the inbound-message read loop. Outbound polling is driven
+    // globally by pollWebsockets().
     void runWebsocket(std::unique_ptr<Websocket> websocket, httplib::ws::WebSocket& ws)
     {
-        HttplibWebsocketWriter writer(ws);
-        std::mutex callMutex;
-        std::atomic<bool> stop{false};
-
-        std::thread pollThread([&] {
-            while (!stop.load()) {
-                {
-                    std::lock_guard<std::mutex> lock(callMutex);
-                    if (ws.is_open()) websocket->poll(writer);
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        WebsocketConnection conn{websocket.get(), ws, HttplibWebsocketWriter(ws)};
+        {
+            std::lock_guard<std::mutex> lock(websocketsMutex);
+            if (stopping) {
+                ws.close(httplib::ws::CloseStatus::GoingAway, "FlightGear shutting down");
+                return;
             }
-        });
+            openWebsockets.insert(&conn);
+        }
 
         std::string msg;
         while (true) {
@@ -326,12 +345,15 @@ public:
 
             HTTPRequest request;
             request.Content = msg;
-            std::lock_guard<std::mutex> lock(callMutex);
-            websocket->handleRequest(request, writer);
+            std::lock_guard<std::mutex> lock(websocketsMutex);
+            websocket->handleRequest(request, conn.writer);
         }
 
-        stop = true;
-        pollThread.join();
+        // Unregister before close(), so update() can no longer poll it.
+        {
+            std::lock_guard<std::mutex> lock(websocketsMutex);
+            openWebsockets.erase(&conn);
+        }
         websocket->close();
     }
 
@@ -339,6 +361,18 @@ public:
     httplib::Server server;
     std::thread listenThread;
     URIHandlerMap uriHandler;
+
+    struct WebsocketConnection {
+        Websocket* websocket;
+        httplib::ws::WebSocket& ws;
+        HttplibWebsocketWriter writer;
+    };
+
+    // Open WebSocket connections. The single global mutex guards this set,
+    // and is held while polling and while handling an inbound message.
+    std::mutex websocketsMutex;
+    std::set<WebsocketConnection*> openWebsockets;
+    bool stopping = false;
 };
 
 HttplibHttpd::HttplibHttpd(SGPropertyNode_ptr configNode)
@@ -512,6 +546,10 @@ void HttplibHttpd::bind()
         SG_LOG(SG_NETWORK, SG_ALERT, "httpd: failed to bind to " << listeningAddress << ":" << listeningPort);
         return;
     }
+    {
+        std::lock_guard<std::mutex> lock(d->websocketsMutex);
+        d->stopping = false;
+    }
     d->listenThread = std::thread([this] { d->server.listen_after_bind(); });
 
     configNode->setBoolValue("running", true);
@@ -527,4 +565,5 @@ void HttplibHttpd::unbind()
 
 void HttplibHttpd::update(double)
 {
+    d->pollWebsockets();
 }
