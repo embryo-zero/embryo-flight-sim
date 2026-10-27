@@ -21,6 +21,7 @@
 #include <simgear/sg_inlines.h>
 
 #include <simgear/canvas/Canvas.hxx>
+#include <simgear/canvas/CanvasFontMetrics.hxx>
 #include <simgear/canvas/CanvasWindow.hxx>
 #include <simgear/canvas/elements/CanvasElement.hxx>
 #include <simgear/canvas/elements/CanvasImage.hxx>
@@ -67,6 +68,7 @@ typedef nasal::Ghost<sc::ElementPtr> NasalElement;
 typedef nasal::Ghost<sc::GroupPtr> NasalGroup;
 typedef nasal::Ghost<sc::TextPtr> NasalText;
 typedef nasal::Ghost<sc::RichTextPtr> NasalRichText;
+using NasalFontMetrics = nasal::Ghost<sc::FontMetricsRef>;
 typedef nasal::Ghost<sc::ImagePtr> NasalImage;
 
 typedef nasal::Ghost<sc::LayoutItemRef> NasalLayoutItem;
@@ -543,6 +545,17 @@ static naRef f_richtext_height(sc::RichText& text, const nasal::CallContext& ctx
     return ctx.to_nasal(text.height());
 }
 
+static naRef f_newFontMetrics(const nasal::CallContext& ctx)
+{
+    const auto desc = ctx.requireArg<std::string>(0);
+    try {
+        return ctx.to_nasal(sc::FontMetricsRef(new sc::FontMetrics(desc)));
+    } catch (sg_exception& e) {
+        ctx.runtimeError("FontMetrics: %s", e.getFormattedMessage().c_str());
+    }
+    return naNil();
+}
+
 naRef initNasalCanvas(naRef globals, naContext c)
 {
   nasal::Hash globals_module(globals, c),
@@ -665,6 +678,21 @@ naRef initNasalCanvas(naRef globals, naContext c)
     .method("lineLength", &sc::Text::lineLength)
     .method("getNearestCursor", &sc::Text::getNearestCursor)
     .method("getCursorPos", &sc::Text::getCursorPos);
+
+  // Opaque measuring object; created via the Nasal-side canvas.FontMetrics wrapper
+  NasalFontMetrics::init("canvas._FontMetrics")
+      .method("setFontDescription", &sc::FontMetrics::setFontDescription)
+      .method("fontDescription", &sc::FontMetrics::fontDescription)
+      .method("setText", &sc::FontMetrics::setText)
+      .method("text", &sc::FontMetrics::text)
+      .method("ascent", &sc::FontMetrics::ascent)
+      .method("descent", &sc::FontMetrics::descent)
+      .method("lineHeight", &sc::FontMetrics::lineHeight)
+      .method("width", &sc::FontMetrics::width)
+      .method("height", &sc::FontMetrics::height)
+      .method("baseline", &sc::FontMetrics::baseline)
+      .method("horizontalAdvance", &sc::FontMetrics::horizontalAdvance);
+  canvas_module.set("_newFontMetrics", &f_newFontMetrics);
 
   NasalRichText::init("canvas.RichText")
       .bases<NasalElement>()
