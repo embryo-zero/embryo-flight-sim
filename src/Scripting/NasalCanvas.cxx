@@ -803,7 +803,8 @@ naRef initNasalCanvas(naRef globals, naContext c)
         .member("resizeCanvas", &sc::ImageLayoutItem::setResizeCanvas)
         .method("setSizeHint", &sc::ImageLayoutItem::setSizeHint)
         .method("setMinimumSize", &sc::ImageLayoutItem::setMinimumSize)
-        .method("setMaximumSize", &sc::ImageLayoutItem::setMaximumSize);
+        .method("setMaximumSize", &sc::ImageLayoutItem::setMaximumSize)
+        .method("setSetGeometryFunc", &sc::ImageLayoutItem::setSetGeometryFunc);
 
     canvas_module.createHash("HBoxLayout")
                  .set("new", &f_newAsBase<sc::HBoxLayout, sc::BoxLayout>);
