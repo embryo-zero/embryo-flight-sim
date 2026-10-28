@@ -24,6 +24,7 @@
 #include <GUI/AirportListModel.hxx>
 #include <GUI/AirportParkingModel.hxx>
 #include <GUI/ItemModel.hxx>
+#include <GUI/PositionedQueryModel.hxx>
 #include <Scripting/NasalSys.hxx>
 #include <Translations/FGTranslate.hxx>
 
@@ -549,6 +550,12 @@ static naRef f_makeAirportParkingModel(const nasal::CallContext& ctx)
     return ctx.to_nasal(SGSharedPtr<AirportParkingModel>(model));
 }
 
+static naRef f_makePositionedQueryModel(const nasal::CallContext& ctx)
+{
+    return ctx.to_nasal(SGSharedPtr<PositionedQueryModel>(
+        new PositionedQueryModel()));
+}
+
 void ItemModel::setupGhosts(nasal::Hash& ns)
 {
     // constants for the change type passed to listeners, see addNasalChangeListener
@@ -598,6 +605,19 @@ void ItemModel::setupGhosts(nasal::Hash& ns)
 
     nasal::Hash aptmodel_hash = ns.createHash("AirportsModel");
     aptmodel_hash.set("new", &f_makeAirportsModel);
+
+    nasal::Ghost<SGSharedPtr<PositionedQueryModel>>::init("gui.PositionedQueryModel")
+        .bases<ItemModelRef>()
+        .member("search", &PositionedQueryModel::setSearchTerm)
+        .member("navaids", &PositionedQueryModel::setQueryNavaids)
+        .member("vors", &PositionedQueryModel::setQueryVOR)
+        .member("ndbs", &PositionedQueryModel::setQueryNDB)
+        .member("waypoints", &PositionedQueryModel::setQueryWaypoints)
+        .method("setPosition", &PositionedQueryModel::setPositionLatLon)
+        .method("clearPosition", &PositionedQueryModel::clearPosition);
+
+    nasal::Hash positionedModel_hash = ns.createHash("PositionedQueryModel");
+    positionedModel_hash.set("new", &f_makePositionedQueryModel);
 
     nasal::Ghost<SGSharedPtr<AirportParkingModel>>::init("gui.AirportParkingModel")
         .bases<ItemModelRef>()

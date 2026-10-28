@@ -1701,6 +1701,26 @@ static naRef f_parseStringAsLatLonValue(naContext c, naRef me, int argc, naRef* 
 }
 
 
+// parseStringAsGeod(text [, lonLatOrder = 0]) : returns [lat, lon], or nil if
+// the text isn't recognised as a latitude and longitude
+static naRef f_parseStringAsGeod(naContext c, naRef me, int argc, naRef* args)
+{
+    if ((argc < 1) || !naIsString(args[0])) {
+        naRuntimeError(c, "Missing / bad argument to parseStringAsGeod");
+    }
+
+    const bool lonLatOrder = (argc > 1) && (naIsNum(args[1])) && (args[1].num != 0.0);
+    SGGeod result;
+    if (!simgear::strutils::parseStringAsGeod(naStr_data(args[0]), &result, lonLatOrder)) {
+        return naNil();
+    }
+
+    naRef vec = naNewVector(c);
+    naVec_append(vec, naNum(result.getLatitudeDeg()));
+    naVec_append(vec, naNum(result.getLongitudeDeg()));
+    return vec;
+}
+
 static naRef f_greatCircleMove(naContext c, naRef me, int argc, naRef* args)
 {
   SGGeod from = globals->get_aircraft_position(), to;
@@ -1864,6 +1884,7 @@ static struct {
     {"geodinfo", f_geodinfo},
     {"formatLatLon", f_formatLatLon},
     {"parseStringAsLatLonValue", f_parseStringAsLatLonValue},
+    {"parseStringAsGeod", f_parseStringAsGeod},
     {"get_cart_ground_intersection", f_get_cart_ground_intersection},
     {"aircraftToCart", f_aircraftToCart},
     {"airportinfo", f_airportinfo},

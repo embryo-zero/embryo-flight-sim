@@ -168,6 +168,24 @@ public:
     {
         m_lastExtent = std::nullopt;
     }
+
+    // Unbind delegates and return them to the reuse pool. If keep is given,
+    // delegates whose index lies within that (inclusive) range are retained;
+    // otherwise all delegates are released.
+    void clearDelegates(const std::optional<std::pair<size_t, size_t>>& keep = std::nullopt)
+    {
+        auto it = std::remove_if(m_delegates.begin(), m_delegates.end(), [this, &keep](const DelegateData& dd) {
+            if (keep && dd.index >= keep->first && dd.index <= keep->second) {
+                return false;
+            }
+
+            dd.delegate->callMethod<void>("unbind");
+            m_inactiveDelegates.push_back(dd.delegate);
+            return true;
+        });
+
+        m_delegates.erase(it, m_delegates.end());
+    }
 };
 
 NasalItemView::NasalItemView(naRef impl) : nasal::Object(impl),
@@ -190,13 +208,23 @@ void NasalItemView::setModel(ItemModelRef m)
     }
 
     d->m_model = m;
+    d->m_callbackRef = 0;
 
-    auto cb = [this](ItemModel::Change t, size_t row, size_t count) {
-        onCallback(t, row, count);
-    };
+    // release any delegates bound to rows of the previous model
+    d->clearDelegates();
 
-    d->m_cachedCount = d->m_model->count();
-    d->m_callbackRef = d->m_model->addChangeCallback(cb);
+    if (d->m_model) {
+        auto cb = [this](ItemModel::Change t, size_t row, size_t count) {
+            onCallback(t, row, count);
+        };
+
+        d->m_cachedCount = d->m_model->count();
+        d->m_callbackRef = d->m_model->addChangeCallback(cb);
+    } else {
+        // a null model is valid, and behaves as an empty one
+        d->m_cachedCount = 0;
+    }
+
     callMethod<void>("modelReset");
 
     d->resetExtent();
@@ -322,16 +350,7 @@ void NasalItemView::update()
 
     d->m_lastExtent = cachedExtent;
     // remove any stale delegates that are no longer visible or in the cached area
-    auto it = std::remove_if(d->m_delegates.begin(), d->m_delegates.end(), [this, cachedExtent](const DelegateData& dd) {
-        if (dd.index < cachedExtent.first || dd.index > cachedExtent.second) {
-            dd.delegate->callMethod<void>("unbind");
-            d->m_inactiveDelegates.push_back(dd.delegate);
-            return true;
-        }
-        return false;
-    });
-
-    d->m_delegates.erase(it, d->m_delegates.end());
+    d->clearDelegates(cachedExtent);
 
     // create new delegates as needed
     // would be faster if we kept m_delegates sorted
@@ -351,11 +370,7 @@ void NasalItemView::onCallback(ItemModel::Change t, size_t row, size_t count)
     using Change = ItemModel::Change;
     switch (t) {
     case Change::Reset:
-        for (auto& dd : d->m_delegates) {
-            dd.delegate->callMethod<void>("unbind");
-            d->m_inactiveDelegates.push_back(dd.delegate);
-        }
-        d->m_delegates.clear();
+        d->clearDelegates();
         d->m_cachedCount = d->m_model->count();
         d->resetExtent();
         callMethod<void>("modelReset");

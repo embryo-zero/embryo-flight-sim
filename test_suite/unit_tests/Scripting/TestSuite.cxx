@@ -3,6 +3,7 @@
 
 #include "benchmarkPropsAccess.hxx"
 #include "testGC.hxx"
+#include "testGeoParse.hxx"
 #include "testNasalLib.hxx"
 #include "testNasalReload.hxx"
 #include "testNasalSys.hxx"
@@ -17,3 +18,4 @@ CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(NasalStringFormattingTests, "Unit tests");
 CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(BenchmarkPropsAccess, "Unit tests");
 CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(VectorTests, "Unit tests");
 CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(NasalReloadTests, "Unit tests");
+CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(NasalGeoParseTests, "Unit tests");

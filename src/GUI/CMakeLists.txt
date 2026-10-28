@@ -14,6 +14,7 @@ set(SOURCES
     ItemModel.cxx
     NasalItemView.cxx
     MouseCursor.cxx
+    PositionedQueryModel.cxx
     MessageBox.cxx
     Highlight.cxx
     FGPUICompatDialog.cxx
@@ -33,6 +34,7 @@ set(HEADERS
     FileDialog.hxx
     ItemModel.hxx
     MouseCursor.hxx
+    PositionedQueryModel.hxx
     MessageBox.hxx
     NasalItemView.hxx
     Highlight.hxx

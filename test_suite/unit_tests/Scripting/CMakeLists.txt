@@ -9,6 +9,8 @@ target_sources(fgfs_test_suite PRIVATE
     testStringFormatting.hxx
     testNasalReload.cxx
     testNasalReload.hxx
+    testGeoParse.cxx
+    testGeoParse.hxx
 )
 
 fg_add_test_suite(NasalSysTests      u)
@@ -17,4 +19,5 @@ fg_add_test_suite(NasalLibTests      u)
 fg_add_test_suite(BenchmarkPropsAccess u)
 fg_add_test_suite(VectorTests        u)
 fg_add_test_suite(NasalReloadTests   u)
+fg_add_test_suite(NasalGeoParseTests u)
 fg_add_test_suite(NasalStringFormattingTests        u)

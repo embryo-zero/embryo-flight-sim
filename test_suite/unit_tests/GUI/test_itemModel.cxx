@@ -14,6 +14,7 @@
 #include "test_suite/FGTestApi/testGlobals.hxx"
 
 #include <initializer_list>
+#include <set>
 #include <simgear/canvas/Canvas.hxx>
 #include <simgear/props/props_io.hxx>
 
@@ -32,6 +33,7 @@
 #include <GUI/ItemModel.hxx>
 #include <GUI/NasalItemView.hxx>
 #include <GUI/PUICompatObject.hxx>
+#include <GUI/PositionedQueryModel.hxx>
 #include <Translations/FGTranslate.hxx>
 
 #include <GUI/new_gui.hxx>
@@ -1050,4 +1052,173 @@ void ItemModelTests::testAirportListModelRecents()
     CPPUNIT_ASSERT(label0.find("EGNT") != std::string::npos);
     auto label1 = std::any_cast<std::string>(m->dataAt(1, "label"));
     CPPUNIT_ASSERT(label1.find("EDDF") != std::string::npos);
+}
+
+namespace {
+
+// index of the first row with the given ident, or -1
+int rowWithIdent(const ItemModel& m, const std::string& ident, const std::string& type = {})
+{
+    for (size_t i = 0; i < m.count(); ++i) {
+        if (!type.empty() && std::any_cast<std::string>(m.dataAt(i, "type")) != type) {
+            continue;
+        }
+        if (std::any_cast<std::string>(m.dataAt(i, "ident")) == ident) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+} // namespace
+
+void ItemModelTests::testPositionedQueryModelSearch()
+{
+    SGSharedPtr<PositionedQueryModel> m(new PositionedQueryModel);
+
+    // no search term, or fewer than three characters, gives no results
+    CPPUNIT_ASSERT_EQUAL(size_t{0}, m->count());
+    m->setSearchTerm("CL");
+    CPPUNIT_ASSERT_EQUAL(size_t{0}, m->count());
+
+    ModelObserver obs;
+    m->addChangeCallback([&obs](ItemModel::Change t, size_t row, size_t count) {
+        obs.f(t, row, count);
+    });
+
+    // Clacton VOR
+    m->setSearchTerm("CLN");
+    CPPUNIT_ASSERT(m->count() > 0);
+    CPPUNIT_ASSERT(!obs.events.empty());
+    CPPUNIT_ASSERT_EQUAL(ItemModel::Change::Reset, obs.events.back().change);
+
+    const int cln = rowWithIdent(*m, "CLN");
+    CPPUNIT_ASSERT_MESSAGE("CLN must be found by ident", cln >= 0);
+
+    // lower-case is accepted for idents
+    m->setSearchTerm("cln");
+    CPPUNIT_ASSERT(rowWithIdent(*m, "CLN") >= 0);
+
+    // going back to a short term empties the model again
+    m->setSearchTerm("CL");
+    CPPUNIT_ASSERT_EQUAL(size_t{0}, m->count());
+
+    // out of range index gives an empty value
+    CPPUNIT_ASSERT(!m->dataAt(100, "label").has_value());
+}
+
+void ItemModelTests::testPositionedQueryModelTypes()
+{
+    SGSharedPtr<PositionedQueryModel> m(new PositionedQueryModel);
+
+    // navaid: label is 'ident (name)', value is the PositionedID
+    m->setSearchTerm("CLN");
+    int row = rowWithIdent(*m, "CLN", "VOR");
+    CPPUNIT_ASSERT_MESSAGE("CLN VOR must be found", row >= 0);
+
+    const auto label = std::any_cast<std::string>(m->dataAt(row, "label"));
+    const auto name = std::any_cast<std::string>(m->dataAt(row, "name"));
+    CPPUNIT_ASSERT(!name.empty());
+    CPPUNIT_ASSERT_EQUAL("CLN ("s + name + ")"s, label);
+
+    const auto guid = std::any_cast<PositionedID>(m->valueAt(row));
+    auto pos = FGPositioned::loadById<FGPositioned>(guid);
+    CPPUNIT_ASSERT(pos);
+    CPPUNIT_ASSERT_EQUAL("CLN"s, pos->ident());
+
+    // waypoint: label is just the ident
+    m->setSearchTerm("ROKME");
+    row = rowWithIdent(*m, "ROKME");
+    CPPUNIT_ASSERT_MESSAGE("ROKME fix must be found", row >= 0);
+    CPPUNIT_ASSERT_EQUAL("ROKME"s, std::any_cast<std::string>(m->dataAt(row, "label")));
+    CPPUNIT_ASSERT_EQUAL("fix"s, std::any_cast<std::string>(m->dataAt(row, "type")));
+
+    // disabling waypoints removes fixes, but not navaids
+    m->setQueryWaypoints(false);
+    CPPUNIT_ASSERT_EQUAL(-1, rowWithIdent(*m, "ROKME"));
+    m->setSearchTerm("CLN");
+    CPPUNIT_ASSERT(rowWithIdent(*m, "CLN") >= 0);
+
+    // and disabling navaids removes the VOR
+    m->setQueryNavaids(false);
+    CPPUNIT_ASSERT_EQUAL(size_t{0}, m->count()); // neither type enabled
+    m->setQueryWaypoints(true);
+    for (size_t i = 0; i < m->count(); ++i) {
+        CPPUNIT_ASSERT(std::any_cast<std::string>(m->dataAt(i, "type")) != "VOR"s);
+    }
+
+    m->setSearchTerm("ROKME");
+    CPPUNIT_ASSERT(rowWithIdent(*m, "ROKME") >= 0);
+
+    // VOR / NDB can be selected separately
+    m->setQueryWaypoints(false);
+    m->setQueryVOR(true);
+    m->setQueryNDB(false);
+    m->setSearchTerm("CLN");
+    CPPUNIT_ASSERT(rowWithIdent(*m, "CLN", "VOR") >= 0);
+    CPPUNIT_ASSERT_EQUAL(-1, rowWithIdent(*m, "CLN", "NDB"));
+}
+
+void ItemModelTests::testPositionedQueryModelNameSearch()
+{
+    SGSharedPtr<PositionedQueryModel> m(new PositionedQueryModel);
+
+    // the name is 'CLACTON VOR-DME', matched case-insensitively from the start
+    m->setSearchTerm("clacton");
+    const int row = rowWithIdent(*m, "CLN");
+    CPPUNIT_ASSERT_MESSAGE("CLN must be found by name", row >= 0);
+
+    for (size_t i = 0; i < m->count(); ++i) {
+        const auto name = std::any_cast<std::string>(m->dataAt(i, "name"));
+        const auto ident = std::any_cast<std::string>(m->dataAt(i, "ident"));
+        CPPUNIT_ASSERT_MESSAGE("name or ident should match: " + name,
+                               name.find("CLACTON") == 0 || ident.find("CLACTON") == 0);
+    }
+
+    // a term matching both ident and name must not give duplicate rows
+    m->setSearchTerm("CLN");
+    int clnCount = 0;
+    for (size_t i = 0; i < m->count(); ++i) {
+        if (std::any_cast<std::string>(m->dataAt(i, "ident")) == "CLN") {
+            clnCount++;
+        }
+    }
+    CPPUNIT_ASSERT(clnCount >= 1);
+    std::set<PositionedID> ids;
+    for (size_t i = 0; i < m->count(); ++i) {
+        CPPUNIT_ASSERT(ids.insert(std::any_cast<PositionedID>(m->valueAt(i))).second);
+    }
+}
+
+void ItemModelTests::testPositionedQueryModelSorting()
+{
+    SGSharedPtr<PositionedQueryModel> m(new PositionedQueryModel);
+
+    auto assertSorted = [&m]() {
+        double last = -1.0;
+        for (size_t i = 0; i < m->count(); ++i) {
+            const double d = std::any_cast<double>(m->dataAt(i, "distanceNm"));
+            CPPUNIT_ASSERT(d >= last);
+            last = d;
+        }
+    };
+
+    // default is the aircraft position: put it close to Clacton
+    FGTestApi::setPosition(SGGeod::fromDeg(1.15, 51.85));
+    m->setSearchTerm("CL");
+    m->setSearchTerm("CLA");
+    CPPUNIT_ASSERT(m->count() > 0);
+    assertSorted();
+    CPPUNIT_ASSERT(std::any_cast<double>(m->dataAt(0, "distanceNm")) < 50.0);
+
+    // explicit position elsewhere changes the distances, and keeps the order sorted
+    const double nearDist = std::any_cast<double>(m->dataAt(0, "distanceNm"));
+    m->setPositionLatLon(37.6, -122.4); // San Francisco
+    assertSorted();
+    CPPUNIT_ASSERT(std::any_cast<double>(m->dataAt(0, "distanceNm")) > nearDist);
+
+    // clearing returns to the aircraft position
+    m->clearPosition();
+    assertSorted();
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(nearDist, std::any_cast<double>(m->dataAt(0, "distanceNm")), 0.01);
 }

@@ -30,6 +30,10 @@ class ItemModelTests : public CppUnit::TestFixture
     CPPUNIT_TEST(testAirportListModelSearch);
     CPPUNIT_TEST(testAirportListModelNameSearch);
     CPPUNIT_TEST(testAirportListModelRecents);
+    CPPUNIT_TEST(testPositionedQueryModelSearch);
+    CPPUNIT_TEST(testPositionedQueryModelTypes);
+    CPPUNIT_TEST(testPositionedQueryModelNameSearch);
+    CPPUNIT_TEST(testPositionedQueryModelSorting);
 
     CPPUNIT_TEST_SUITE_END();
 
@@ -57,6 +61,10 @@ public:
     void testAirportListModelSearch();
     void testAirportListModelNameSearch();
     void testAirportListModelRecents();
+    void testPositionedQueryModelSearch();
+    void testPositionedQueryModelTypes();
+    void testPositionedQueryModelNameSearch();
+    void testPositionedQueryModelSorting();
 
 private:
 };
