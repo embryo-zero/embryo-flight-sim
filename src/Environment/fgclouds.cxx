@@ -94,8 +94,7 @@ FGClouds::FGClouds() : index(0)
 
 FGClouds::~FGClouds()
 {
-    // Wait for any in-flight background rebuild to finish before
-    // destroying the placement map (the task holds raw pointers into it).
+    // Wait for any in-flight background rebuilds to finish.
     if (_rebuildFuture.valid())
         _rebuildFuture.wait();
 
@@ -330,11 +329,14 @@ void FGClouds::buildLayer(int iLayer, const string& name, double coverage, doubl
 
 void FGClouds::buildCloudLayers(void)
 {
-    // Cancel any in-flight rebuild before clearing the map it holds pointers into
-    if (_rebuildFuture.valid())
-        _rebuildFuture.wait();
+    // Clouds may instead be placed individually via add-cloud (e.g. by Advanced
+    // Weather), in which case the layers must leave them, and the repeating
+    // mode, untouched.
+    if (!fgGetBool("/environment/params/cloud-layers-enabled", true))
+        return;
 
-    // Clear out the existing clouds;  Destructor handles cleanup
+    // Clear out the existing clouds; an in-flight rebuild keeps its own
+    // references to the clouds it is using.
     {
         std::lock_guard<std::mutex> lk(_placementMutex);
         _cloudPlacementMap.clear();
@@ -694,6 +696,7 @@ FGClouds::RebuildSnapshot FGClouds::captureSnapshot()
         std::lock_guard<std::mutex> lk(_placementMutex);
         for (const auto& [key, value] : _cloudPlacementMap) {
             const SGVoxelCloud* c = std::get<0>(value).get();
+            bool inField = false;
             osg::Vec3f q = std::get<1>(value) - centerOsg;
             osg::Vec3f p = _cloudPosMatrix * q;
 
@@ -704,6 +707,7 @@ FGClouds::RebuildSnapshot FGClouds::captureSnapshot()
                 auto localCloud = std::make_pair(c, p);
                 snap.detailedFieldList.push_back(localCloud);
                 snap.cloudbaseM = std::min(p.z(), snap.cloudbaseM);
+                inField = true;
             }
 
             // Only use the rough field map if we aren't using a repeating (detailed) field)
@@ -715,7 +719,10 @@ FGClouds::RebuildSnapshot FGClouds::captureSnapshot()
                 auto localCloud = std::make_pair(c, p);
                 snap.roughFieldList.push_back(localCloud);
                 snap.cloudbaseM = std::min(p.z(), snap.cloudbaseM);
+                inField = true;
             }
+
+            if (inField) snap.clouds.push_back(std::get<0>(value));
         }
     }
     return snap;

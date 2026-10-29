@@ -33,15 +33,19 @@ class SGVoxelCloud;
 
 class FGClouds
 {
+    friend class CloudLayerTests;
+
 public:
     // Snapshot of everything the background thread needs - captured on the
     // main thread before the async task is launched.
     struct RebuildSnapshot {
-        // Copy of placement map - raw pointers are safe because SGVoxelCloud
-        // objects are owned by _cloudPlacementMap and outlive the task.
+        // Copy of placement map.  The raw pointers are kept valid by clouds,
+        // below, even if the clouds are removed from _cloudPlacementMap while
+        // the task runs.
         using LocalPlacement = std::pair<const SGVoxelCloud*, osg::Vec3f>;
         std::vector<LocalPlacement> detailedFieldList;
         std::vector<LocalPlacement> roughFieldList;
+        std::vector<std::shared_ptr<const SGVoxelCloud>> clouds;
 
         // Config captured at snapshot time
         int detailedFieldWidth{};
@@ -160,7 +164,8 @@ private:
     size_t _detailedFieldHeight;
     size_t _detailedFieldVoxelSize;
 
-    typedef std::pair<std::unique_ptr<const SGVoxelCloud>, osg::Vec3f> CloudPlacement;
+    // Shared with any in-flight rebuild's snapshot.
+    typedef std::pair<std::shared_ptr<const SGVoxelCloud>, osg::Vec3f> CloudPlacement;
 
     typedef std::unordered_map<int, CloudPlacement> CloudPlacementMap;
 
