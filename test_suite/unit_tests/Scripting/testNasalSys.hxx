@@ -20,6 +20,7 @@ class NasalSysTests : public CppUnit::TestFixture
     CPPUNIT_TEST(testCompileLarge);
     CPPUNIT_TEST(testRoundFloor);
     CPPUNIT_TEST(testRange);
+    CPPUNIT_TEST(testInfinityNaN);
     CPPUNIT_TEST(testKeywordArgInHash);
     CPPUNIT_TEST(testMemberAccess);
     CPPUNIT_TEST(testRecursiveMemberAccess);
@@ -47,6 +48,7 @@ public:
     void testCompileLarge();
     void testRoundFloor();
     void testRange();
+    void testInfinityNaN();
     void testKeywordArgInHash();
     void testMemberAccess();
     void testRecursiveMemberAccess();

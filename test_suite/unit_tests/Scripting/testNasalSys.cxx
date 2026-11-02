@@ -259,6 +259,19 @@ void NasalSysTests::testRange()
     CPPUNIT_ASSERT(ok);
 }
 
+void NasalSysTests::testInfinityNaN()
+{
+    bool ok = FGTestApi::executeNasal(R"(
+        unitTest.assert_equal(1e200 * 1e200, math.inf);
+        unitTest.assert_equal(1e200 * -1e200, -math.inf);
+        unitTest.assert(math.isfinite(42));
+        unitTest.assert(!math.isfinite(math.inf));
+        unitTest.assert(!math.isnan(42));
+        unitTest.assert(math.isnan(math.inf / math.inf));
+    )");
+    CPPUNIT_ASSERT(ok);
+}
+
 void NasalSysTests::testKeywordArgInHash()
 {
     bool ok = FGTestApi::executeNasal(R"(
