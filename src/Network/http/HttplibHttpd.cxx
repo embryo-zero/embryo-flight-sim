@@ -25,6 +25,8 @@
 #include "HTTPRequest.hxx"
 #include "HTTPResponse.hxx"
 #include "JsonUriHandler.hxx"
+#include "LogUriHandler.hxx"
+#include "LogWebsocket.hxx"
 #include "MirrorPropertyTreeWebsocket.hxx"
 #include "NavdbUriHandler.hxx"
 #include "PkgUriHandler.hxx"
@@ -412,6 +414,10 @@ void HttplibHttpd::bind()
             SG_LOG(SG_NETWORK, SG_INFO, "httpd: adding run uri handler at " << uri);
             d->uriHandler.push_back(new RunUriHandler(uri));
         }
+        if (!(uri = n->getStringValue("log")).empty()) {
+            SG_LOG(SG_NETWORK, SG_INFO, "httpd: adding log uri handler at " << uri);
+            d->uriHandler.push_back(new LogUriHandler(uri));
+        }
         if (!(uri = n->getStringValue("navdb")).empty()) {
             SG_LOG(SG_NETWORK, SG_INFO, "httpd: adding navdb uri handler at " << uri);
             d->uriHandler.push_back(new NavdbUriHandler(uri));
@@ -457,6 +463,11 @@ void HttplibHttpd::bind()
         const string path = req.matches[1].str();
         SG_LOG(SG_NETWORK, SG_INFO, "new MirrorPropertyTreeWebsocket for: " << path);
         d->runWebsocket(std::make_unique<MirrorPropertyTreeWebsocket>(path), ws);
+    });
+
+    server.WebSocket("/LogListener", [this](const httplib::Request& req, httplib::ws::WebSocket& ws) {
+        SG_LOG(SG_NETWORK, SG_INFO, "new LogWebsocket");
+        d->runWebsocket(std::make_unique<LogWebsocket>(req.get_param_value("levels"), req.get_param_value("match")), ws);
     });
 
     n = configNode->getNode("options");

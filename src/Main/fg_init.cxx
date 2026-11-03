@@ -590,7 +590,9 @@ void fgInitLogging(const std::string& pri)
     }
 
     static_logToHomeCallback = sglog().logToFile("fghome-log", logPath);
-    static_logToHomeCallback->setLogLevels(fileLogLevel);
+    // go via the log stream, so the combined levels (which decide what is
+    // generated at all) pick up the requested file levels
+    sglog().setLogLevels(fileLogLevel, "fghome-log");
 }
 
 ///////////////////////////////////////////////////////////////////////////////

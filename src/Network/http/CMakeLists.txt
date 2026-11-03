@@ -13,6 +13,8 @@ target_sources(fgfsObjects PRIVATE
 	MirrorPropertyTreeWebsocket.cxx
 	DialogsUriHandler.cxx
 	NavdbUriHandler.cxx
+	LogUriHandler.cxx
+	LogWebsocket.cxx
 	PropertyChangeWebsocket.cxx
 	PropertyChangeObserver.cxx
 	jsonprops.cxx
@@ -28,6 +30,8 @@ target_sources(fgfsObjects PRIVATE
 	RunUriHandler.hxx
 	DialogsUriHandler.hxx
 	NavdbUriHandler.hxx
+	LogUriHandler.hxx
+	LogWebsocket.hxx
 	HTTPRequest.hxx
 	Websocket.hxx
 	PropertyChangeWebsocket.hxx

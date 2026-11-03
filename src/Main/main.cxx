@@ -10,6 +10,7 @@
 #include <simgear/compiler.h>
 #include <simgear/props/props_io.hxx>
 
+#include <algorithm>
 #include <iostream>
 
 #include <osg/Camera>
@@ -434,9 +435,7 @@ static void fgIdleFunction ( void ) {
         fgSetInt("/sim/session",session);
     }
 
-    if ( idle_state == 1000 ) {
-        sglog().setStartupLoggingEnabled(false);
-
+    if (idle_state == 1000) {
         // We've finished all our initialization steps, from now on we
         // run the main loop.
         fgSetBool("sim/sceneryloaded", false);
@@ -503,10 +502,22 @@ struct SGLogDeltasListener : SGPropertyChangeListener
 };
 static SGLogDeltasListener s_sglogdeltas_listener;
 
+// how many log entries the logstream keeps for /log and for the log file
+// once it is opened. Used until /sim/logging/buffer-entries is available.
+static const size_t EARLY_RETAINED_LOG_ENTRIES = 10000;
+
+struct LogBufferSizeListener : SGPropertyChangeListener {
+    void valueChanged(SGPropertyNode* node) override
+    {
+        sglog().setMaxRetainedEntries(static_cast<size_t>(std::max(0, node->getIntValue())));
+    }
+};
+static LogBufferSizeListener s_logBufferSizeListener;
+
 // Main top level initialization
 int fgMainInit( int argc, char **argv )
 {
-    sglog().setStartupLoggingEnabled(true);
+    sglog().setMaxRetainedEntries(EARLY_RETAINED_LOG_ENTRIES);
 
     globals = new FGGlobals;
     auto initHomeResult = fgInitHome(argc, argv);
@@ -620,6 +631,13 @@ int fgMainInit( int argc, char **argv )
         return EXIT_FAILURE;
     } else if (configResult == flightgear::FG_OPTIONS_EXIT) {
         return EXIT_SUCCESS;
+    }
+
+    {
+        // defaults.xml, config files and --prop have all been read by now
+        auto bufferEntries = fgGetNode("/sim/logging/buffer-entries", true);
+        s_logBufferSizeListener.valueChanged(bufferEntries);
+        bufferEntries->addChangeListener(&s_logBufferSizeListener, false /*initial*/);
     }
 
     bool didUseLauncher = false; /* <didUseLauncher> is set but unused. */
