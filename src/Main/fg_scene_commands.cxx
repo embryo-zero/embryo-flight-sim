@@ -349,6 +349,19 @@ do_dialog_close (const SGPropertyNode * arg, SGPropertyNode * root)
 
 
 /**
+ * Built-in command: Re-read an XML-configured dialog from disk, and
+ * re-show it if it was open.
+ *
+ * dialog-name: the name of the GUI dialog to reload.
+ */
+static bool
+do_dialog_reload(const SGPropertyNode* arg, SGPropertyNode* root)
+{
+    auto gui = globals->get_subsystem<NewGUI>();
+    return gui->reloadDialog(arg->getStringValue("dialog-name"));
+}
+
+/**
  * Update a value in the active XML-configured dialog.
  *
  * object-name: The name of the GUI object(s) (all GUI objects if omitted).
@@ -533,36 +546,37 @@ do_release_cockpit_button (const SGPropertyNode * arg, SGPropertyNode * root)
 static struct {
   const char * name;
   SGCommandMgr::command_t command;
-} built_ins [] = {
-    { "exit", do_exit },
-    { "reset", do_reset },
-    { "reposition", do_reposition },
-    { "switch-aircraft", do_switch_aircraft },
-    { "panel-load", do_panel_load },
-    { "preferences-load", do_preferences_load },
-    { "toggle-fullscreen", do_toggle_fullscreen },
-    { "screen-capture", do_screen_capture },
-    { "tile-cache-reload", do_tile_cache_reload },
-    { "dialog-new", do_dialog_new },
-    { "dialog-show", do_dialog_show },
-    { "dialog-toggle", do_dialog_toggle },
-    { "dialog-close", do_dialog_close },
-    { "dialog-update", do_dialog_update },
-    { "dialog-apply", do_dialog_apply },
-    { "open-browser", do_open_browser },
-    { "gui-redraw", do_gui_redraw },
-    { "add-model", do_add_model },
-    { "presets-commit", do_presets_commit },
-    { "press-cockpit-button", do_press_cockpit_button },
-    { "release-cockpit-button", do_release_cockpit_button },
-    { "dump-scenegraph", do_dump_scene_graph },
-    { "dump-terrainbranch", do_dump_terrain_branch },
-    { "print-visible-scene", do_print_visible_scene_info },
-    { "reload-shaders", do_reload_shaders },
-    { "reload-materials", do_materials_reload },
-    { "reload-compositor", do_reload_compositor },
-    { "open-launcher", do_open_launcher },
-    { 0, 0 }			// zero-terminated
+} built_ins[] = {
+    {"exit", do_exit},
+    {"reset", do_reset},
+    {"reposition", do_reposition},
+    {"switch-aircraft", do_switch_aircraft},
+    {"panel-load", do_panel_load},
+    {"preferences-load", do_preferences_load},
+    {"toggle-fullscreen", do_toggle_fullscreen},
+    {"screen-capture", do_screen_capture},
+    {"tile-cache-reload", do_tile_cache_reload},
+    {"dialog-new", do_dialog_new},
+    {"dialog-show", do_dialog_show},
+    {"dialog-toggle", do_dialog_toggle},
+    {"dialog-close", do_dialog_close},
+    {"dialog-reload", do_dialog_reload},
+    {"dialog-update", do_dialog_update},
+    {"dialog-apply", do_dialog_apply},
+    {"open-browser", do_open_browser},
+    {"gui-redraw", do_gui_redraw},
+    {"add-model", do_add_model},
+    {"presets-commit", do_presets_commit},
+    {"press-cockpit-button", do_press_cockpit_button},
+    {"release-cockpit-button", do_release_cockpit_button},
+    {"dump-scenegraph", do_dump_scene_graph},
+    {"dump-terrainbranch", do_dump_terrain_branch},
+    {"print-visible-scene", do_print_visible_scene_info},
+    {"reload-shaders", do_reload_shaders},
+    {"reload-materials", do_materials_reload},
+    {"reload-compositor", do_reload_compositor},
+    {"open-launcher", do_open_launcher},
+    {0, 0} // zero-terminated
 };
 
 
