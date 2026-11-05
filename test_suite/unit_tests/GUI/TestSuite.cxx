@@ -5,9 +5,11 @@
 #include "test_itemModel.hxx"
 #include "test_nasalMenu.hxx"
 #include "test_xmlDialog.hxx"
+#include "test_xmlValueSync.hxx"
 
 // Set up the unit tests.
 CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(NasalMenuTests, "Unit tests");
 // CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(XMLDialogTests, "Unit tests");
 CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(ItemModelTests, "Unit tests");
 CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(FontMetricsTests, "Unit tests");
+CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(XMLValueSyncTests, "Unit tests");

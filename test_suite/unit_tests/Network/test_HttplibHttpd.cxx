@@ -65,6 +65,10 @@ void HttplibHttpdTests::setUp()
     auto history = globals->get_subsystem_mgr()->add<FGFlightHistory>();
     history->init();
 
+    // Ties /sim/time/elapsed-sec to the sim time advanced by FGTestApi::runForTime().
+    auto props = globals->get_subsystem_mgr()->add<FGProperties>();
+    props->bind();
+
     globals->get_commands()->addCommand("http-test-noop", &testNoopCommand);
     globals->get_commands()->addCommand("http-test-echo-args", &testEchoArgsCommand);
 
@@ -126,6 +130,7 @@ void HttplibHttpdTests::tearDown()
     _httpd.reset();
     simgear::Dir(_docRoot).remove(true);
 
+    globals->get_subsystem<FGProperties>()->unbind();
     FGTestApi::tearDown::shutdownTestGlobals();
 }
 
@@ -314,23 +319,22 @@ void HttplibHttpdTests::testPropertyListenerWebsocket()
     // ahead of the listener being registered.
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
+    // poll() throttles on /sim/time/elapsed-sec, so let simulated time pass.
+    // A new subscriber is notified once immediately with the current value.
+    FGTestApi::runForTime(1.0);
+
+    auto readValue = [&ws]() {
+        std::string msg;
+        CPPUNIT_ASSERT_EQUAL(httplib::ws::ReadResult::Text, ws.read(msg));
+        auto j = json::parse(msg);
+        CPPUNIT_ASSERT_EQUAL(std::string("/test/http/watched"), j.at("path").get<std::string>());
+        return j.at("value").get<std::string>();
+    };
+    CPPUNIT_ASSERT_EQUAL(std::string("before"), readValue());
+
     fgSetString("/test/http/watched", "after");
-    // PropertyChangeWebsocket::poll() throttles to /sim/http/property-
-    // websocket/update-interval-secs (default 20Hz) based on
-    // /sim/time/elapsed-sec. Nothing advances that outside a real main
-    // loop -- TimeManager needs more than just being added to the
-    // subsystem manager to actually tick it -- so bump it directly; the
-    // update pump thread (ticking in real time, independently
-    // of this call) picks up the new value on its next iteration.
-    fgSetDouble("/sim/time/elapsed-sec", fgGetDouble("/sim/time/elapsed-sec") + 1.0);
-
-    std::string msg;
-    auto result = ws.read(msg);
-    CPPUNIT_ASSERT_EQUAL(httplib::ws::ReadResult::Text, result);
-
-    auto j = json::parse(msg);
-    CPPUNIT_ASSERT_EQUAL(std::string("/test/http/watched"), j.at("path").get<std::string>());
-    CPPUNIT_ASSERT_EQUAL(std::string("after"), j.at("value").get<std::string>());
+    FGTestApi::runForTime(1.0);
+    CPPUNIT_ASSERT_EQUAL(std::string("after"), readValue());
 }
 
 void HttplibHttpdTests::testShutdownWithOpenWebsocket()
