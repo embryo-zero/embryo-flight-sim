@@ -239,6 +239,12 @@ public:
           */
         bool fromTypeString(const std::string& type);
 
+        void setMinRunwayLengthFt(double lenFt) { _min_runway_length_ft = lenFt; }
+        double minRunwayLengthFt() const { return _min_runway_length_ft; }
+
+        void setOnlyHardSurface(bool onlyHard) { _only_hard_surface = onlyHard; }
+        bool onlyHardSurface() const { return _only_hard_surface; }
+
         virtual FGPositioned::Type minType() const override { return _type; }
         virtual FGPositioned::Type maxType() const override { return _type; }
         virtual bool pass(FGPositioned* pos) const override;
@@ -246,6 +252,7 @@ public:
     protected:
         FGPositioned::Type _type;
         double _min_runway_length_ft;
+        bool _only_hard_surface = true;
     };
 
 

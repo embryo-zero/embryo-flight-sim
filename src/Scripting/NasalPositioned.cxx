@@ -14,11 +14,12 @@
 
 #include "NasalPositioned.hxx"
 
-#include <simgear/sg_inlines.h>
-#include <simgear/scene/material/mat.hxx>
-#include <simgear/magvar/magvar.hxx>
-#include <simgear/timing/sg_time.hxx>
 #include <simgear/bucket/newbucket.hxx>
+#include <simgear/magvar/magvar.hxx>
+#include <simgear/nasal/cppbind/NasalCallContext.hxx>
+#include <simgear/scene/material/mat.hxx>
+#include <simgear/sg_inlines.h>
+#include <simgear/timing/sg_time.hxx>
 
 #include <Airports/runways.hxx>
 #include <Airports/airport.hxx>
@@ -907,30 +908,46 @@ static naRef f_airportinfo(naContext c, naRef me, int argc, naRef* args)
 
 static naRef f_findAirportsWithinRange(naContext c, naRef me, int argc, naRef* args)
 {
-  int argOffset = 0;
-  SGGeod pos = globals->get_aircraft_position();
-  argOffset += geodFromArgs(args, 0, argc, pos);
+    SGGeod pos = globals->get_aircraft_position();
+    double rangeNm = 0.0;
+    FGAirport::TypeRunwayFilter filter; // defaults to airports only
 
-  if (!naIsNum(args[argOffset])) {
-    naRuntimeError(c, "findAirportsWithinRange expected range (in nm) as arg %d", argOffset);
-  }
+    if (argc == 1 && naIsHash(args[0])) {
+        // Keyword/hash form: findAirportsWithinRange({[pos: ...,] range: ..., ...})
+        nasal::CallContext ctx(c, me, argc, args);
+        naRef posRef = ctx.getNamedArg<naRef>("pos", naNil());
+        if (!naIsNil(posRef)) {
+            geodFromArgs(&posRef, 0, 1, pos);
+        }
 
-  FGAirport::TypeRunwayFilter filter; // defaults to airports only
-  double rangeNm = args[argOffset++].num;
-  if (argOffset < argc) {
-    filter.fromTypeString(naStr_data(args[argOffset++]));
-  }
+        rangeNm = ctx.requireNamedArg<double>("range");
+        filter.fromTypeString(ctx.getNamedArg<std::string>("type", "airport"));
+        filter.setMinRunwayLengthFt(ctx.getNamedArg<double>("min_length_ft", filter.minRunwayLengthFt()));
+        filter.setOnlyHardSurface(ctx.getNamedArg<bool>("hard_surface", true));
+    } else {
+        // Positional form: findAirportsWithinRange([<position>,] <range-nm> [, <type>])
+        int argOffset = geodFromArgs(args, 0, argc, pos);
 
-  naRef r = naNewVector(c);
+        if (!naIsNum(args[argOffset])) {
+            naRuntimeError(c, "findAirportsWithinRange expected range (in nm) as arg %d", argOffset);
+        }
 
-  FGPositionedList apts = FGPositioned::findWithinRange(pos, rangeNm, &filter);
-  FGPositioned::sortByRange(apts, pos);
+        rangeNm = args[argOffset++].num;
+        if (argOffset < argc) {
+            filter.fromTypeString(naStr_data(args[argOffset++]));
+        }
+    }
 
-  for (FGPositionedRef a : apts) {
-    naVec_append(r, ghostForAirport(c, fgpositioned_cast<FGAirport>(a)));
-  }
+    naRef r = naNewVector(c);
 
-  return r;
+    FGPositionedList apts = FGPositioned::findWithinRange(pos, rangeNm, &filter);
+    FGPositioned::sortByRange(apts, pos);
+
+    for (FGPositionedRef a : apts) {
+        naVec_append(r, ghostForAirport(c, fgpositioned_cast<FGAirport>(a)));
+    }
+
+    return r;
 }
 
 static naRef f_findAirportsByICAO(naContext c, naRef me, int argc, naRef* args)

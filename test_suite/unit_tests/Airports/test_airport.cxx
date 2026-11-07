@@ -83,6 +83,62 @@ void AirportTests::testAirportNasal()
 
         var mag = magvar(apt);
         unitTest.assert_doubles_equal(rwy.magnetic_heading, 51 - mag, 0.1);
+
+        # Test findAirportsWithinRange using legacy ghost (airportinfo):
+        var allAptsLegacy = positioned.findAirportsWithinRange(apt, 60);
+        var filteredAptsLegacy = positioned.findAirportsWithinRange({
+            pos: apt,
+            range: 60,
+            min_length_ft: 9000,
+        });
+        unitTest.assert(size(allAptsLegacy) > 0);
+        unitTest.assert(size(filteredAptsLegacy) > 0);
+        unitTest.assert(size(filteredAptsLegacy) <= size(allAptsLegacy));
+
+        # Test findAirportsWithinRange using new cppbind ghost (positioned.airportinfo):
+        var aptCppBind = positioned.airportinfo('EGCC');
+        var allAptsCppBind = positioned.findAirportsWithinRange(aptCppBind, 60);
+        var filteredAptsCppBind = positioned.findAirportsWithinRange({
+            pos: aptCppBind,
+            range: 60,
+            min_length_ft: 9000,
+        });
+        unitTest.assert_equal(size(allAptsCppBind), size(allAptsLegacy));
+        unitTest.assert_equal(size(filteredAptsCppBind), size(filteredAptsLegacy));
+
+        # Test global legacy function findAirportsWithinRange with keyword/hash options:
+        var legacyGlobal = findAirportsWithinRange({
+            pos: apt,
+            range: 60,
+            type: "airport",
+            min_length_ft: 9000,
+        });
+        unitTest.assert_equal(size(legacyGlobal), size(filteredAptsLegacy));
+
+        # Test type filtering (e.g. heliports):
+        var heliports = positioned.findAirportsWithinRange(apt, 60, "heliport");
+        var heliportsHash = positioned.findAirportsWithinRange({
+            pos: apt,
+            range: 60,
+            type: "heliport",
+        });
+        unitTest.assert(size(heliports) > 0);
+        unitTest.assert_equal(size(heliports), size(heliportsHash));
+        foreach (var h; heliports) {
+            unitTest.assert_equal(h.type, "heliport");
+        }
+
+        # Test hard_surface = false returns all airports including unpaved (matches findWithinRange):
+        var allAirportsWithUnpaved = positioned.findWithinRange(apt, 60, "airport");
+        var aptsAnySurface = positioned.findAirportsWithinRange({
+            pos: apt,
+            range: 60,
+            min_length_ft: 0,
+            hard_surface: false,
+        });
+        unitTest.assert(size(allAirportsWithUnpaved) > 0);
+        unitTest.assert_equal(size(aptsAnySurface), size(allAirportsWithUnpaved));
+        unitTest.assert(size(aptsAnySurface) >= size(allAptsLegacy));
     )");
     CPPUNIT_ASSERT(ok);
 }

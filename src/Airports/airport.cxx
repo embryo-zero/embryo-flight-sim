@@ -459,13 +459,21 @@ bool FGAirport::TypeRunwayFilter::fromTypeString(const std::string& type)
 //------------------------------------------------------------------------------
 bool FGAirport::TypeRunwayFilter::pass(FGPositioned* pos) const
 {
-  FGAirport* apt = static_cast<FGAirport*>(pos);
-  if(  (apt->type() == FGPositioned::AIRPORT)
-    && !apt->hasHardRunwayOfLengthFt(_min_runway_length_ft)
-    )
-    return false;
+    FGAirport* apt = static_cast<FGAirport*>(pos);
+    if (apt->type() == FGPositioned::AIRPORT) {
+        if (_only_hard_surface) {
+            if (!apt->hasHardRunwayOfLengthFt(_min_runway_length_ft)) {
+                return false;
+            }
+        } else if (_min_runway_length_ft > 0.0) {
+            FGRunwayRef rwy = apt->longestRunway();
+            if (!rwy || (rwy->lengthFt() < _min_runway_length_ft)) {
+                return false;
+            }
+        }
+    }
 
-  return true;
+    return true;
 }
 
 void FGAirport::clearAirportsCache()

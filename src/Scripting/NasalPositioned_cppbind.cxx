@@ -204,58 +204,55 @@ f_airport_parking(FGAirport& apt, nasal::CallContext ctx)
  */
 static bool extractGeod(nasal::CallContext& ctx, SGGeod& result)
 {
-  if( !ctx.argc )
+    if (!ctx.argc) {
+        return false;
+    }
+
+    if (ctx.isGhost(0)) {
+        FGPositionedRef pos = positionedFromArg(ctx.requireArg<naRef>(0));
+        if (!pos) {
+            pos = ctx.from_nasal<FGPositionedRef>(ctx.requireArg<naRef>(0));
+        }
+
+        if (pos) {
+            result = pos->geod();
+            ctx.popFront();
+            return true;
+        }
+    } else if (ctx.isHash(0)) {
+        nasal::Hash pos_hash = ctx.requireArg<nasal::Hash>(0);
+
+        // check for manual latitude / longitude names
+        naRef lat = pos_hash.get("lat"),
+              lon = pos_hash.get("lon");
+
+        if (naIsNum(lat) && naIsNum(lon)) {
+            result = SGGeod::fromDeg(ctx.from_nasal<double>(lon),
+                                     ctx.from_nasal<double>(lat));
+            ctx.popFront();
+            return true;
+        }
+
+        // geo.Coord uses _lat/_lon in radians
+        // TODO should we check if its really a geo.Coord?
+        lat = pos_hash.get("_lat");
+        lon = pos_hash.get("_lon");
+
+        if (naIsNum(lat) && naIsNum(lon)) {
+            result = SGGeod::fromRad(ctx.from_nasal<double>(lon),
+                                     ctx.from_nasal<double>(lat));
+            ctx.popFront();
+            return true;
+        }
+    } else if (ctx.isNumeric(0) && ctx.isNumeric(1)) {
+        // lat, lon
+        result = SGGeod::fromDeg(ctx.requireArg<double>(1),
+                                 ctx.requireArg<double>(0));
+        ctx.popFront(2);
+        return true;
+    }
+
     return false;
-
-  if( ctx.isGhost(0) )
-  {
-    FGPositionedRef pos =
-      ctx.from_nasal<FGPositionedRef>(ctx.requireArg<naRef>(0));
-
-    if( pos )
-    {
-      result = pos->geod();
-      ctx.popFront();
-      return true;
-    }
-  }
-  else if( ctx.isHash(0) )
-  {
-    nasal::Hash pos_hash = ctx.requireArg<nasal::Hash>(0);
-
-    // check for manual latitude / longitude names
-    naRef lat = pos_hash.get("lat"),
-          lon = pos_hash.get("lon");
-    if( naIsNum(lat) && naIsNum(lon) )
-    {
-      result = SGGeod::fromDeg( ctx.from_nasal<double>(lon),
-                                ctx.from_nasal<double>(lat) );
-      ctx.popFront();
-      return true;
-    }
-
-    // geo.Coord uses _lat/_lon in radians
-    // TODO should we check if its really a geo.Coord?
-    lat = pos_hash.get("_lat");
-    lon = pos_hash.get("_lon");
-    if( naIsNum(lat) && naIsNum(lon) )
-    {
-      result = SGGeod::fromRad( ctx.from_nasal<double>(lon),
-                                ctx.from_nasal<double>(lat) );
-      ctx.popFront();
-      return true;
-    }
-  }
-  else if( ctx.isNumeric(0) && ctx.isNumeric(1) )
-  {
-    // lat, lon
-    result = SGGeod::fromDeg( ctx.requireArg<double>(1),
-                              ctx.requireArg<double>(0) );
-    ctx.popFront(2);
-    return true;
-  }
-
-  return false;
 }
 
 /**
@@ -300,20 +297,36 @@ static naRef f_airportinfo(nasal::CallContext ctx)
 }
 
 /**
- * findAirportsWithinRange([<position>,] <range-nm> [, type])
+ * findAirportsWithinRange([<position>,] <range-nm> [, <type>])
+ * findAirportsWithinRange({[pos: <position>,] range: <range-nm> [, type: <type>] [, min_length_ft: <len>] [, hard_surface: <bool>]})
  */
 static naRef f_findAirportsWithinRange(nasal::CallContext ctx)
 {
-  SGGeod pos = getPosition(ctx);
-  double range_nm = ctx.requireArg<double>(0);
+    SGGeod pos;
+    double range_nm = 0.0;
+    FGAirport::TypeRunwayFilter filter; // defaults to airports only
 
-  FGAirport::TypeRunwayFilter filter; // defaults to airports only
-  filter.fromTypeString( ctx.getArg<std::string>(1) );
+    if (ctx.argc == 1 && ctx.isHash(0)) {
+        // Keyword/hash form: findAirportsWithinRange({[pos: ...,] range: ..., ...})
+        naRef posRef = ctx.getNamedArg<naRef>("pos", naNil());
+        nasal::CallContext posCtx(ctx.c_ctx(), ctx.me, naIsNil(posRef) ? 0 : 1, &posRef);
+        pos = getPosition(posCtx);
 
-  FGPositionedList apts = FGPositioned::findWithinRange(pos, range_nm, &filter);
-  FGPositioned::sortByRange(apts, pos);
+        range_nm = ctx.requireNamedArg<double>("range");
+        filter.fromTypeString(ctx.getNamedArg<std::string>("type", "airport"));
+        filter.setMinRunwayLengthFt(ctx.getNamedArg<double>("min_length_ft", filter.minRunwayLengthFt()));
+        filter.setOnlyHardSurface(ctx.getNamedArg<bool>("hard_surface", true));
+    } else {
+        // Positional form: findAirportsWithinRange([<position>,] <range-nm> [, <type>])
+        pos = getPosition(ctx);
+        range_nm = ctx.requireArg<double>(0);
+        filter.fromTypeString(ctx.getArg<std::string>(1));
+    }
 
-  return ctx.to_nasal(apts);
+    FGPositionedList apts = FGPositioned::findWithinRange(pos, range_nm, &filter);
+    FGPositioned::sortByRange(apts, pos);
+
+    return ctx.to_nasal(apts);
 }
 
 /**
