@@ -7,6 +7,7 @@
 
 #include "test_cloud_layers.hxx"
 
+#include "test_suite/FGTestApi/scene_graph.hxx"
 #include "test_suite/FGTestApi/testGlobals.hxx"
 
 #include <chrono>
@@ -18,9 +19,11 @@
 #include <Main/fg_props.hxx>
 #include <Main/globals.hxx>
 #include <Time/light.hxx>
+#include <Viewer/renderer.hxx>
 
 #include <simgear/props/props.hxx>
 #include <simgear/scene/sky/newcloud.hxx>
+#include <simgear/scene/sky/sky.hxx>
 #include <simgear/structure/commands.hxx>
 
 namespace {
@@ -103,6 +106,14 @@ void CloudLayerTests::tearDown()
     FGTestApi::tearDown::shutdownTestGlobals();
 }
 
+void CloudLayerTests::commitPendingRebuild()
+{
+    _clouds->updateFromOsgTraversal();
+    if (_clouds->_rebuildFuture.valid())
+        _clouds->_rebuildFuture.wait();
+    _clouds->updateFromOsgTraversal();
+}
+
 void CloudLayerTests::testDisabledLayersKeepPlacedClouds()
 {
     fgSetBool("/environment/params/cloud-layers-enabled", false);
@@ -163,4 +174,44 @@ void CloudLayerTests::testRemovedCloudOutlivesRebuild()
     CPPUNIT_ASSERT(!destroyedOnRemove);
     CPPUNIT_ASSERT(!gate.destroyedWhileInUse);
     CPPUNIT_ASSERT(gate.destroyed);
+}
+
+void CloudLayerTests::testClearLayersRemovesClouds()
+{
+    // A real sky with its cloud layers, and the layer definitions from
+    // Environment/cloudlayers.xml.
+    FGTestApi::setUp::initScenery();
+    globals->get_subsystem_mgr()->add<FGLight>();
+
+    // A small field keeps the rebuilds quick.
+    fgSetInt("/sim/rendering/hdr/clouds/detailed-voxel-field-width", 16);
+    fgSetInt("/sim/rendering/hdr/clouds/detailed-voxel-field-height", 16);
+
+    // Layer clouds are placed at the aircraft, and the field is centred on
+    // the view, so put both in the same place.
+    SGGeod view = globals->get_view_position();
+    fgSetDouble("/position/latitude-deg", view.getLatitudeDeg());
+    fgSetDouble("/position/longitude-deg", view.getLongitudeDeg());
+
+    // A broken mid-level layer with no precipitation is altostratus, which
+    // is a procedural layer cloud, so needs no voxel textures.
+    fgSetDouble("/environment/rain-norm", 0.0);
+    fgSetDouble("/environment/snow-norm", 0.0);
+    SGPropertyNode* layer0 = fgGetNode("/environment/clouds/layer", 0, true);
+    layer0->setDoubleValue("elevation-ft", 8000.0);
+    layer0->setStringValue("coverage", "broken");
+
+    _clouds->set_update_event(1);
+    commitPendingRebuild();
+    CPPUNIT_ASSERT_EQUAL(std::string("as"), layer0->getStringValue("layer-type"));
+    // The cloud base is 99999 m only for a field with no clouds in it.
+    CPPUNIT_ASSERT((double)_clouds->_cloudBaseM < 99999.0);
+
+    const int layerCount = globals->get_renderer()->getSky()->get_cloud_layer_count();
+    for (int i = 0; i < layerCount; i++)
+        fgGetNode("/environment/clouds/layer", i, true)->setStringValue("coverage", "clear");
+
+    _clouds->set_update_event(2);
+    commitPendingRebuild();
+    CPPUNIT_ASSERT_DOUBLES_EQUAL(99999.0, (double)_clouds->_cloudBaseM, 1.0);
 }

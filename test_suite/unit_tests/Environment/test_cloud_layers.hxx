@@ -19,6 +19,7 @@ class CloudLayerTests : public CppUnit::TestFixture
     CPPUNIT_TEST(testDisabledLayersKeepPlacedClouds);
     CPPUNIT_TEST(testDisabledLayersKeepNonRepeatingMode);
     CPPUNIT_TEST(testRemovedCloudOutlivesRebuild);
+    CPPUNIT_TEST(testClearLayersRemovesClouds);
     CPPUNIT_TEST_SUITE_END();
 
 public:
@@ -37,6 +38,13 @@ public:
     // alive until the rebuild has finished with it.
     void testRemovedCloudOutlivesRebuild();
 
+    // Setting every layer clear replaces a committed field of layer clouds
+    // with an empty one.
+    void testClearLayersRemovesClouds();
+
 private:
+    // Launches a field rebuild if one is pending, waits for it and commits it.
+    void commitPendingRebuild();
+
     std::unique_ptr<FGClouds> _clouds;
 };

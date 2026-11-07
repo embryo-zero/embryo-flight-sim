@@ -46,7 +46,8 @@ static mt seed;
 // Exception count from the fmm library
 static unsigned int _FMMExceptionCount = 0;
 
-FGClouds::FGClouds() : index(0)
+FGClouds::FGClouds()
+    : index(0)
 {
     update_event = 0;
     _options = new simgear::SGReaderWriterOptions;
@@ -336,10 +337,13 @@ void FGClouds::buildCloudLayers(void)
         return;
 
     // Clear out the existing clouds; an in-flight rebuild keeps its own
-    // references to the clouds it is using.
+    // references to the clouds it is using. The field is marked dirty here
+    // rather than relying on addCloud(), as with every layer clear no cloud
+    // is added and the old field would otherwise stay committed.
     {
         std::lock_guard<std::mutex> lk(_placementMutex);
         _cloudPlacementMap.clear();
+        _fieldDirty = true;
     }
 
     // Enable repeating of the voxel space as the clouds we generate should be global
