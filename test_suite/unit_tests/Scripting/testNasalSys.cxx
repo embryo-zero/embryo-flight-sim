@@ -521,3 +521,96 @@ void NasalSysTests::testFirstLineOffsetComments()
     CPPUNIT_ASSERT(ok);
     CPPUNIT_ASSERT_EQUAL(42, fgGetInt("/foo"));
 }
+
+// Regression tests for constant-pool de-duplication in simgear's Nasal
+// codegen
+//
+// A string literal compiled *before* a symbol of the same name in the same
+// code block used to replace the interned symbol with the non-interned
+// literal. The OP_LOCAL fast path matches symbols by pointer, so a lookup from
+// a different code object (closure, or bind()) missed that variable and
+// resolved to a same-named variable in an outer scope instead.
+// (Lookups from the same code block share the constant, and a miss in every
+// scope falls back to a content-based search, so an outer 'value' is needed
+// to observe the bug.)
+
+void NasalSysTests::testSymbolAfterLiteralClosure()
+{
+    // literal in the RHS of the declaration; one level of closure is enough
+    bool ok = FGTestApi::executeNasal(R"(
+        var value = "outer";
+        var spec = {value: "inner"};
+        var make = func(h) { var value = h["value"]; return func { return value; }; };
+        unitTest.assert_equal(make(spec)(), "inner");
+    )");
+    CPPUNIT_ASSERT(ok);
+
+    // the original three-level report
+    ok = FGTestApi::executeNasal(R"(
+        var result = (func {
+            var value = "level0";
+            return (func {
+                var value = "level1";
+                var make = func(spec) {
+                    var value = spec["value"];
+                    return func { return value; };
+                };
+                return make({value: "MyValue"})();
+            })();
+        })();
+        unitTest.assert_equal(result, "MyValue");
+    )");
+    CPPUNIT_ASSERT(ok);
+}
+
+void NasalSysTests::testSymbolAfterLiteralUnrelated()
+{
+    // the earlier literal need not have anything to do with the declaration
+    bool ok = FGTestApi::executeNasal(R"(
+        var value = "outer";
+        var make = func { var s = "value"; var value = "inner"; return func { return value; }; };
+        unitTest.assert_equal(make()(), "inner");
+    )");
+    CPPUNIT_ASSERT(ok);
+}
+
+void NasalSysTests::testSymbolAfterLiteralBind()
+{
+    // no lexical nesting: the poisoned frame's locals become the namespace of
+    // a separately compiled function via bind()
+    bool ok = FGTestApi::executeNasal(R"(
+        var value = "outer";
+        var spec = {value: "inner"};
+        var reader = func { return value; };
+        var outerFn = func { return value; };
+        var getns = func(h) { var value = h["value"]; return caller(0)[0]; };
+        unitTest.assert_equal(bind(reader, getns(spec), outerFn)(), "inner");
+    )");
+    CPPUNIT_ASSERT(ok);
+}
+
+void NasalSysTests::testSymbolLiteralControls()
+{
+    // these pass with or without the fix
+    bool ok = FGTestApi::executeNasal(R"(
+        var value = "outer";
+        var spec = {value: "inner"};
+
+        # symbol before literal
+        var m1 = func { var value = "inner"; var s = "value"; return func { return value; }; };
+        unitTest.assert_equal(m1()(), "inner");
+
+        # no literal at all
+        var m2 = func(h) { var value = h.value; return func { return value; }; };
+        unitTest.assert_equal(m2(spec)(), "inner");
+
+        # same code block reads its own variable
+        var f = func(h) { var value = h["value"]; return value; };
+        unitTest.assert_equal(f(spec), "inner");
+
+        # literals themselves are unaffected
+        var x = "x"; var s = "x";
+        unitTest.assert_equal(s ~ x, "xx");
+    )");
+    CPPUNIT_ASSERT(ok);
+}

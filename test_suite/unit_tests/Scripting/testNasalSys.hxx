@@ -29,6 +29,10 @@ class NasalSysTests : public CppUnit::TestFixture
     CPPUNIT_TEST(testFindComm);
     CPPUNIT_TEST(testHashDeclarationError);
     CPPUNIT_TEST(testFirstLineOffsetComments);
+    CPPUNIT_TEST(testSymbolAfterLiteralClosure);
+    CPPUNIT_TEST(testSymbolAfterLiteralUnrelated);
+    CPPUNIT_TEST(testSymbolAfterLiteralBind);
+    CPPUNIT_TEST(testSymbolLiteralControls);
     CPPUNIT_TEST_SUITE_END();
 
     bool checkNoNasalErrors();
@@ -57,4 +61,8 @@ public:
     void testFindComm();
     void testHashDeclarationError();
     void testFirstLineOffsetComments();
+    void testSymbolAfterLiteralClosure();
+    void testSymbolAfterLiteralUnrelated();
+    void testSymbolAfterLiteralBind();
+    void testSymbolLiteralControls();
 };
