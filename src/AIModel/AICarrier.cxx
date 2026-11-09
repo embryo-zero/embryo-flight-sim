@@ -210,6 +210,10 @@ void FGAICarrier::update(double dt) {
     // the distance from the eyepoint to the flols
     _flols_dist = norm(eyeWrtFlols);
 
+    // The light sprites are scaled by distance so that they stay visible, so
+    // they need the distance from wherever the camera is, not from the ownship.
+    _flols_view_dist = norm(globals->get_view_position_cart() - flols_location);
+
     // lineup (left/right) - stern lights and Carrier landing system (Aircraft/Generic/an_spn_46.nas)
     double lineup_hdg, lineup_az2, lineup_s;
 
@@ -378,6 +382,8 @@ void FGAICarrier::bind(){
         SGRawValuePointer<int>(&_flols_visible_light));
     tie("controls/flols/distance-m",
         SGRawValuePointer<double>(&_flols_dist));
+    tie("controls/flols/view-distance-m",
+        SGRawValuePointer<double>(&_flols_view_dist));
     tie("controls/flols/angle-degs",
         SGRawValuePointer<double>(&_flols_angle));
     tie("controls/flols/lineup-degs",

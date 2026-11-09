@@ -13,6 +13,7 @@
 #include <osgViewer/Viewer>
 
 #include <simgear/ephemeris/ephemeris.hxx>
+#include <simgear/math/SGQuat.hxx>
 #include <simgear/misc/sg_dir.hxx>
 #include <simgear/misc/sg_path.hxx>
 #include <simgear/structure/commands.hxx>
@@ -651,18 +652,28 @@ FGGlobals::get_view_position_cart() const
 }
 SGVec3d FGGlobals::get_ownship_reference_position_cart() const
 {
-    SGVec3d pos = get_aircraft_position_cart();
+    const SGGeod geod = get_aircraft_position();
+    const SGVec3d pos = SGVec3d::fromGeod(geod);
 
-    if (referenceOffsetX)
-        pos[0] += referenceOffsetX->getDoubleValue();
+    // The offset is given in model axes (x aft, y right, z up) from the model
+    // origin, typically to the pilot's eye, and moves with the airframe's
+    // heading, pitch and roll.
+    const double x = referenceOffsetX ? referenceOffsetX->getDoubleValue() : 0.0;
+    const double y = referenceOffsetY ? referenceOffsetY->getDoubleValue() : 0.0;
+    const double z = referenceOffsetZ ? referenceOffsetZ->getDoubleValue() : 0.0;
+    if (x == 0.0 && y == 0.0 && z == 0.0)
+        return pos;
 
-    if (referenceOffsetY)
-        pos[1] += referenceOffsetY->getDoubleValue();
+    // Orientation of the body (x forward, y right, z down) wrt the earth
+    // centred frame.
+    const SGQuatd ec2hl = SGQuatd::fromLonLat(geod);
+    const SGQuatd hl2body = SGQuatd::fromYawPitchRollDeg(orientHeading->getDoubleValue(),
+                                                         orientPitch->getDoubleValue(),
+                                                         orientRoll->getDoubleValue());
+    const SGQuatd ec2body = ec2hl * hl2body;
 
-    if (referenceOffsetZ)
-        pos[2] += referenceOffsetZ->getDoubleValue();
-
-    return pos;
+    const SGVec3d bodyOffset(-x, y, -z);
+    return pos + ec2body.backTransform(bodyOffset);
 }
 
 static void treeDumpRefCounts(int depth, SGPropertyNode* n)

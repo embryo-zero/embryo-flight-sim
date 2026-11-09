@@ -113,7 +113,8 @@ private:
     double _elevator_transition_time = 0;
     bool _elevators = false;
     double _flols_angle = 0;
-    double               _flols_dist                              = 0;        // the distance of the eyepoint from the flols
+    double _flols_dist = 0;                                                   // the distance of the ownship reference point from the flols
+    double _flols_view_dist = 0;                                              // the distance of the current view position from the flols; used to scale the light sprites
     int                  _flols_visible_light                     = 0;        // the flols light which is visible at the moment
     SGPropertyNode_ptr _flols_x_node;
     SGPropertyNode_ptr _flols_y_node;
