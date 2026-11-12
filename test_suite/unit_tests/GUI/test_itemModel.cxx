@@ -29,6 +29,7 @@
 #include "test_suite/FGTestApi/testGlobals.hxx"
 
 #include <GUI/AirportListModel.hxx>
+#include <GUI/AnyUtils.hxx>
 #include <GUI/FGPUICompatDialog.hxx>
 #include <GUI/ItemModel.hxx>
 #include <GUI/NasalItemView.hxx>
@@ -372,6 +373,123 @@ void ItemModelTests::testChangeCallbackIds()
     m->removeChangeCallback(id2); // harmless
     static_cast<TrivialItemModel*>(m.get())->insert(0, {"D", "d"});
     CPPUNIT_ASSERT(calls3 > before);
+}
+
+namespace {
+// simple fixed model, with a custom find to check virtual dispatch
+class FixedModel : public ItemModel
+{
+public:
+    size_t count() const override { return 3; }
+    std::any dataAt(size_t index, const std::string& key) const override
+    {
+        if (key == "value") return std::any{static_cast<int>(index) * 10};
+        return {};
+    }
+    int find(const std::any&, const std::string&) const override
+    {
+        usedOverride = true;
+        return 42;
+    }
+    mutable bool usedOverride = false;
+};
+} // namespace
+
+void ItemModelTests::testFind()
+{
+    SGPropertyNode_ptr props(new SGPropertyNode());
+    props->setStringValue("fruit[0]/legend", "Apple");
+    props->setIntValue("fruit[0]/shelf", 41);
+    props->setStringValue("fruit[1]/legend", "Lemon");
+    props->setIntValue("fruit[1]/shelf", 42);
+    props->setStringValue("fruit[2]/legend", "Lime");
+    props->setIntValue("fruit[2]/shelf", 43);
+    props->setDoubleValue("fruit[2]/weight", 2.5);
+
+    SGSharedPtr<PropertyItemModel> m(new PropertyItemModel(props));
+    m->setItemName("fruit");
+    m->setLabelPath("legend");
+    m->setValuePath("shelf");
+
+    // default key is 'value'
+    CPPUNIT_ASSERT_EQUAL(0, m->find(std::any{41}));
+    CPPUNIT_ASSERT_EQUAL(2, m->find(std::any{43}));
+    // numeric types compare across int / double
+    CPPUNIT_ASSERT_EQUAL(1, m->find(std::any{42.0}));
+    CPPUNIT_ASSERT_EQUAL(-1, m->find(std::any{99}));
+    // type mismatch never matches
+    CPPUNIT_ASSERT_EQUAL(-1, m->find(std::any{"41"s}));
+
+    // explicit keys
+    CPPUNIT_ASSERT_EQUAL(1, m->find(std::any{"Lemon"s}, "label"));
+    CPPUNIT_ASSERT_EQUAL(-1, m->find(std::any{"Banana"s}, "label"));
+    CPPUNIT_ASSERT_EQUAL(2, m->find(std::any{2.5}, "weight"));
+    // key missing on some rows, or all
+    CPPUNIT_ASSERT_EQUAL(-1, m->find(std::any{1}, "nonexistent"));
+
+    // wider numeric types (eg PositionedID) match too
+    CPPUNIT_ASSERT(flightgear::any_util::valuesMatch(std::any{int64_t{42}}, std::any{42}));
+    CPPUNIT_ASSERT(flightgear::any_util::valuesMatch(std::any{uint64_t{7}}, std::any{7.0}));
+    CPPUNIT_ASSERT(flightgear::any_util::valuesMatch(std::any{true}, std::any{true}));
+    CPPUNIT_ASSERT(!flightgear::any_util::valuesMatch(std::any{true}, std::any{1}));
+    CPPUNIT_ASSERT(!flightgear::any_util::valuesMatch(std::any{}, std::any{}));
+
+    // empty model
+    SGPropertyNode_ptr empty(new SGPropertyNode());
+    SGSharedPtr<PropertyItemModel> em(new PropertyItemModel(empty));
+    em->setItemName("fruit");
+    CPPUNIT_ASSERT_EQUAL(-1, em->find(std::any{1}));
+
+    // follows model changes
+    props->setStringValue("fruit[1]/legend", "Grape");
+    CPPUNIT_ASSERT_EQUAL(-1, m->find(std::any{"Lemon"s}, "label"));
+    CPPUNIT_ASSERT_EQUAL(1, m->find(std::any{"Grape"s}, "label"));
+
+    // index-as-value syntax
+    SGSharedPtr<PropertyItemModel> im(new PropertyItemModel(props));
+    im->setItemName("fruit");
+    im->setLabelPath("legend");
+    im->setValuePath("#");
+    CPPUNIT_ASSERT_EQUAL(2, im->find(std::any{2}));
+}
+
+void ItemModelTests::testFindNasal()
+{
+    fgSetString("/findtest/item[0]/name", "Ford");
+    fgSetInt("/findtest/item[0]/id", 10);
+    fgSetString("/findtest/item[1]/name", "Volkswagen");
+    fgSetInt("/findtest/item[1]/id", 14);
+
+    bool ok = FGTestApi::executeNasal(R"(
+        var r = props.globals.getNode("/findtest");
+        var m = gui.PropertyItemModel.new(r, "item", "name", "id");
+        unitTest.assert_equal(m.find(14), 1);
+        unitTest.assert_equal(m.find(10, "value"), 0);
+        unitTest.assert_equal(m.find(99), -1);
+        unitTest.assert_equal(m.find("Volkswagen", "label"), 1);
+        unitTest.assert_equal(m.find("Nobody", "label"), -1);
+
+        var TestModel = {
+            count: func() { return 2; },
+            modelData: func(row, key) {
+                if (key == "value") return ["a", "b"][row];
+                return nil;
+            }
+        };
+        var nm = gui.NasalItemModel.new(TestModel);
+        unitTest.assert_equal(nm.find("b"), 1);
+        unitTest.assert_equal(nm.find("z"), -1);
+    )");
+
+    CPPUNIT_ASSERT(ok);
+}
+
+void ItemModelTests::testFindOverride()
+{
+    SGSharedPtr<FixedModel> fm(new FixedModel);
+    ItemModelRef base = fm;
+    CPPUNIT_ASSERT_EQUAL(42, base->find(std::any{10}));
+    CPPUNIT_ASSERT(fm->usedOverride);
 }
 
 void ItemModelTests::testNasalPropertyModelListener()

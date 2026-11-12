@@ -31,6 +31,18 @@ public:
     virtual size_t count() const = 0;
     virtual std::any dataAt(size_t index, const std::string& key) const = 0;
 
+    /**
+     * @brief find the first row whose data for \p key matches \p value
+     *
+     * The default implementation scans every row via dataAt. Derived classes
+     * may override it if they can search more efficiently.
+     *
+     * @param value the value to look for
+     * @param key the data key to compare, 'value' by default
+     * @return the matching row index, or -1 if none found
+     */
+    virtual int find(const std::any& value, const std::string& key = "value") const;
+
     enum class Change {
         Reset,
         Modified,

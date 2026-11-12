@@ -23,6 +23,7 @@
 
 #include <GUI/AirportListModel.hxx>
 #include <GUI/AirportParkingModel.hxx>
+#include <GUI/AnyUtils.hxx>
 #include <GUI/ItemModel.hxx>
 #include <GUI/PositionedQueryModel.hxx>
 #include <Scripting/NasalSys.hxx>
@@ -131,6 +132,17 @@ std::string ItemModel::labelAt(size_t index) const
 std::any ItemModel::valueAt(size_t index) const
 {
     return dataAt(index, "value");
+}
+
+int ItemModel::find(const std::any& value, const std::string& key) const
+{
+    const auto n = count();
+    for (size_t i = 0; i < n; ++i) {
+        if (flightgear::any_util::valuesMatch(dataAt(i, key), value)) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -556,6 +568,16 @@ static naRef f_makePositionedQueryModel(const nasal::CallContext& ctx)
         new PositionedQueryModel()));
 }
 
+static naRef f_itemModelFind(ItemModel& m, const nasal::CallContext& ctx)
+{
+    // args: value, [key = 'value']
+    auto key = ctx.getArg<std::string>(1);
+    if (key.empty()) {
+        key = "value";
+    }
+    return ctx.to_nasal(m.find(ctx.requireArg<std::any>(0), key));
+}
+
 void ItemModel::setupGhosts(nasal::Hash& ns)
 {
     // constants for the change type passed to listeners, see addNasalChangeListener
@@ -571,6 +593,7 @@ void ItemModel::setupGhosts(nasal::Hash& ns)
         .method("dataAt", &ItemModel::dataAt)
         .method("labelAt", &ItemModel::labelAt)
         .method("valueAt", &ItemModel::valueAt)
+        .method("find", &f_itemModelFind)
         .method("addChangeListener", &ItemModel::addNasalChangeListener)
         .method("removeChangeListener", &ItemModel::removeChangeCallback);
     nasal::Ghost<SGSharedPtr<NasalItemModel>>::init("gui.NasalItemModel")

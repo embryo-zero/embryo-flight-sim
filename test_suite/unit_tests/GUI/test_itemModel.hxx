@@ -20,6 +20,9 @@ class ItemModelTests : public CppUnit::TestFixture
     CPPUNIT_TEST(testPropertyModelAppend);
     CPPUNIT_TEST(testPropertyModelTranslation);
     CPPUNIT_TEST(testChangeCallbackIds);
+    CPPUNIT_TEST(testFind);
+    CPPUNIT_TEST(testFindNasal);
+    CPPUNIT_TEST(testFindOverride);
     CPPUNIT_TEST(testNasalPropertyModelListener);
     CPPUNIT_TEST(testMenuFromModel);
     CPPUNIT_TEST(testComboBoxWithModel);
@@ -52,6 +55,9 @@ public:
     void testPropertyModelAppend();
     void testPropertyModelTranslation();
     void testChangeCallbackIds();
+    void testFind();
+    void testFindNasal();
+    void testFindOverride();
     void testNasalPropertyModelListener();
     void testMenuFromModel();
     void testComboBoxWithModel();
