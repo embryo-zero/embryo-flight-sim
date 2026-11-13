@@ -906,15 +906,15 @@ static naRef f_airportinfo(naContext c, naRef me, int argc, naRef* args)
   return ghostForAirport(c, apt);
 }
 
-static naRef f_findAirportsWithinRange(naContext c, naRef me, int argc, naRef* args)
+static naRef f_findAirportsWithinRange(naContext c, naRef me, int argc, naRef* args, int named, void* /* user data */)
 {
     SGGeod pos = globals->get_aircraft_position();
     double rangeNm = 0.0;
     FGAirport::TypeRunwayFilter filter; // defaults to airports only
 
-    if (argc == 1 && naIsHash(args[0])) {
-        // Keyword/hash form: findAirportsWithinRange({[pos: ...,] range: ..., ...})
-        nasal::CallContext ctx(c, me, argc, args);
+    if (named) {
+        // Keyword form: findAirportsWithinRange([pos: ...,] range: ..., ...)
+        nasal::CallContext ctx(c, me, argc, args, named);
         naRef posRef = ctx.getNamedArg<naRef>("pos", naNil());
         if (!naIsNil(posRef)) {
             geodFromArgs(&posRef, 0, 1, pos);
@@ -1905,7 +1905,6 @@ static struct {
     {"get_cart_ground_intersection", f_get_cart_ground_intersection},
     {"aircraftToCart", f_aircraftToCart},
     {"airportinfo", f_airportinfo},
-    {"findAirportsWithinRange", f_findAirportsWithinRange},
     {"findAirportsByICAO", f_findAirportsByICAO},
     {"navinfo", f_navinfo},
     {"findNavaidsWithinRange", f_findNavaidsWithinRange},
@@ -1963,7 +1962,10 @@ naRef initNasalPositioned(naRef globals, naContext c)
       naNewFunc(c, naNewCCode(c, funcs[i].func)));
     }
 
-  return naNil();
+    hashset(c, globals, "findAirportsWithinRange",
+            naNewFunc(c, naNewCCodeMaybeNamed(c, f_findAirportsWithinRange)));
+
+    return naNil();
 }
 
 void postinitNasalPositioned(naRef globals, naContext c)

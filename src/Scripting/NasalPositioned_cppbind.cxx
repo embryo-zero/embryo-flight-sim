@@ -306,8 +306,8 @@ static naRef f_findAirportsWithinRange(nasal::CallContext ctx)
     double range_nm = 0.0;
     FGAirport::TypeRunwayFilter filter; // defaults to airports only
 
-    if (ctx.argc == 1 && ctx.isHash(0)) {
-        // Keyword/hash form: findAirportsWithinRange({[pos: ...,] range: ..., ...})
+    if (ctx.isNamed()) {
+        // Keyword form: findAirportsWithinRange([pos: ...,] range: ..., ...)
         naRef posRef = ctx.getNamedArg<naRef>("pos", naNil());
         nasal::CallContext posCtx(ctx.c_ctx(), ctx.me, naIsNil(posRef) ? 0 : 1, &posRef);
         pos = getPosition(posCtx);
@@ -518,7 +518,7 @@ naRef initNasalPositioned_cppbind(naRef globalsRef, naContext c)
               positioned( globals.createHash("positioned") );
 
   positioned.set("airportinfo", &f_airportinfo);
-  positioned.set("findAirportsWithinRange", f_findAirportsWithinRange);
+  positioned.set("findAirportsWithinRange", nasal::maybeNamed(f_findAirportsWithinRange));
   positioned.set("findAirportsByICAO", &f_findAirportsByICAO);
   positioned.set("navinfo", &f_navinfo);
 
