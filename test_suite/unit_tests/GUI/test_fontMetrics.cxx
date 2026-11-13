@@ -44,9 +44,6 @@ void FontMetricsTests::tearDown()
 
 void FontMetricsTests::testBasicMeasure()
 {
-    // needs Pango text layout, which can crash on headless runners
-    FG_REQUIRE_GRAPHICS();
-
     bool ok = FGTESTAPI_EXECUTE_NASAL(R"nasal(
         var fm = canvas.FontMetrics.new("Liberation Sans 14px");
         unitTest.assert(fm.ascent() > 0, "ascent");
@@ -78,9 +75,6 @@ void FontMetricsTests::testBasicMeasure()
 
 void FontMetricsTests::testFontChange()
 {
-    // needs Pango text layout, which can crash on headless runners
-    FG_REQUIRE_GRAPHICS();
-
     bool ok = FGTESTAPI_EXECUTE_NASAL(R"nasal(
         var small = canvas.FontDescription.new(family: "Liberation Sans", size: 10);
         var large = canvas.FontDescription.new(family: "Liberation Sans", size: 24);
@@ -100,9 +94,6 @@ void FontMetricsTests::testFontChange()
 
 void FontMetricsTests::testBadFont()
 {
-    // needs Pango text layout, which can crash on headless runners
-    FG_REQUIRE_GRAPHICS();
-
     // non-string / non-FontDescription argument is rejected
     bool ok = FGTESTAPI_EXECUTE_NASAL(R"nasal(
         var err = call(func canvas.FontMetrics.new(42), nil, var e = []);

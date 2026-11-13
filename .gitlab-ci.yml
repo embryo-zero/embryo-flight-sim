@@ -359,7 +359,7 @@ test:
         quit $_exitcode
       end
       EOF
-      gdb -batch -x gdb_cmds.txt --args ./test_suite/fgfs_test_suite --fg-root $CI_PROJECT_DIR/testFGData --headless --junit
+      gdb -batch -x gdb_cmds.txt --args ./test_suite/fgfs_test_suite --fg-root $CI_PROJECT_DIR/testFGData --junit
 
   needs:
     - job: linux-build

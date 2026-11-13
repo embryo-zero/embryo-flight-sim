@@ -63,8 +63,8 @@ void helpPrintout(std::ostream &stream) {
     stream << "    --no-summary        disable the final summary printout.\n";
     stream << '\n';
     stream << "  Environment options:\n";
-    stream << "    --headless          skip tests which need a window system or graphics\n";
-    stream << "                        backend (eg text layout), for headless CI runners.\n";
+    stream << "    --headless          skip tests which need a real window system or OpenGL\n";
+    stream << "                        context (tests marked FG_REQUIRE_GRAPHICS).\n";
     stream << '\n';
     stream << "  FG options:\n";
     stream << "    --fg-root           the path to FGData.\n";

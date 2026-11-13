@@ -121,11 +121,12 @@ public:
 
 /**
  * @brief set by the test runner (--headless) when there is no window system or
- * graphics backend available, eg on CI runners.
+ * OpenGL context available.
  *
- * Anything which needs one - notably Canvas text layout, which goes through
- * Pango/HarfBuzz and can crash without a display or fonts - should use
- * FG_REQUIRE_GRAPHICS() to skip itself.
+ * Tests which need a real GL context should use FG_REQUIRE_GRAPHICS() to skip
+ * themselves. Note that Canvas text layout (Pango/HarfBuzz) does *not* need
+ * one: it only needs fonts under FG_ROOT/Fonts, which the CI test data
+ * includes.
  */
 void setHeadless(bool headless);
 bool isHeadless();

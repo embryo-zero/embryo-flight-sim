@@ -412,9 +412,6 @@ void ItemModelTests::testNasalPropertyModelListener()
 
 void ItemModelTests::testMenuFromModel()
 {
-    // needs text layout, which crashes in Pango/HarfBuzz on headless runners
-    FG_REQUIRE_GRAPHICS();
-
     bool ok = FGTestApi::executeNasal(R"(
         var root = props.globals.getNode("/test-menu-model", 1);
         root.getNode("item[0]/label", 1).setValue("Alpha");
@@ -494,9 +491,6 @@ void ItemModelTests::testMenuFromModel()
 
 void ItemModelTests::testComboBoxWithModel()
 {
-    // needs text layout, which crashes in Pango/HarfBuzz on headless runners
-    FG_REQUIRE_GRAPHICS();
-
     bool ok = FGTestApi::executeNasal(R"(
         var root = props.globals.getNode("/test-combo-model", 1);
         root.getNode("value[0]", 1).setValue("one");
@@ -551,9 +545,6 @@ void ItemModelTests::testComboBoxWithModel()
 
 void ItemModelTests::testXMLComboBoxSyntaxes()
 {
-    // needs text layout, which crashes in Pango/HarfBuzz on headless runners
-    FG_REQUIRE_GRAPHICS();
-
     // the label of the first item is translated via the 'dialog-exit'
     // resource, since dialogs use their name to select that.
     const std::string translated = FGTranslate("core").getWithDefault("dialog-exit", "exit-button-label", "");

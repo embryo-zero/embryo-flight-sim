@@ -133,8 +133,6 @@ void XMLValueSyncTests::userEdit(const PUICompatObjectRef& w, double v) const
 
 void XMLValueSyncTests::testInitialValue()
 {
-    FG_REQUIRE_GRAPHICS();
-
     fgSetDouble(TEST_PROP, 3.0);
     auto dlg = makeDialog(TEST_PROP, false);
     auto w = dlg->widgetByName("w");
@@ -147,8 +145,6 @@ void XMLValueSyncTests::testInitialValue()
 
 void XMLValueSyncTests::testLiveWidgetUpdatesOnPropertyChange()
 {
-    FG_REQUIRE_GRAPHICS();
-
     fgSetDouble(TEST_PROP, 1.0);
     auto dlg = makeDialog(TEST_PROP, true);
     auto w = dlg->widgetByName("w");
@@ -172,8 +168,6 @@ void XMLValueSyncTests::testLiveWidgetUpdatesOnPropertyChange()
 
 void XMLValueSyncTests::testNonLiveWidgetIgnoresPropertyChange()
 {
-    FG_REQUIRE_GRAPHICS();
-
     fgSetDouble(TEST_PROP, 1.0);
     auto dlg = makeDialog(TEST_PROP, false);
     auto w = dlg->widgetByName("w");
@@ -188,8 +182,6 @@ void XMLValueSyncTests::testNonLiveWidgetIgnoresPropertyChange()
 
 void XMLValueSyncTests::testNonLiveWidgetUpdatesAfterUpdateValues()
 {
-    FG_REQUIRE_GRAPHICS();
-
     fgSetDouble(TEST_PROP, 1.0);
     auto dlg = makeDialog(TEST_PROP, false);
     auto w = dlg->widgetByName("w");
@@ -211,8 +203,6 @@ void XMLValueSyncTests::testNonLiveWidgetUpdatesAfterUpdateValues()
 
 void XMLValueSyncTests::testLocalEditNotPropagatedUntilApply()
 {
-    FG_REQUIRE_GRAPHICS();
-
     fgSetDouble(TEST_PROP, 1.0);
     auto dlg = makeDialog(TEST_PROP, false);
     auto w = dlg->widgetByName("w");
@@ -227,8 +217,6 @@ void XMLValueSyncTests::testLocalEditNotPropagatedUntilApply()
 
 void XMLValueSyncTests::testUpdateValuesDiscardsLocalEdit()
 {
-    FG_REQUIRE_GRAPHICS();
-
     fgSetDouble(TEST_PROP, 1.0);
     auto dlg = makeDialog(TEST_PROP, false);
     auto w = dlg->widgetByName("w");
@@ -249,8 +237,6 @@ void XMLValueSyncTests::testUpdateValuesDiscardsLocalEdit()
 
 void XMLValueSyncTests::testLiveLocalEditNotPropagatedUntilApply()
 {
-    FG_REQUIRE_GRAPHICS();
-
     fgSetDouble(TEST_PROP, 1.0);
     auto dlg = makeDialog(TEST_PROP, true);
     auto w = dlg->widgetByName("w");
@@ -269,8 +255,6 @@ void XMLValueSyncTests::testLiveLocalEditNotPropagatedUntilApply()
 
 void XMLValueSyncTests::testApplyNoChangeDoesNotWrite()
 {
-    FG_REQUIRE_GRAPHICS();
-
     fgSetDouble(TEST_PROP, 1.0);
     auto dlg = makeDialog(TEST_PROP, false);
 
@@ -298,8 +282,6 @@ void XMLValueSyncTests::testApplyNoChangeDoesNotWrite()
 
 void XMLValueSyncTests::testApplySkipsHiddenWidget()
 {
-    FG_REQUIRE_GRAPHICS();
-
     fgSetDouble(TEST_PROP, 1.0);
     auto dlg = makeDialog(TEST_PROP, false);
     auto w = dlg->widgetByName("w");
@@ -316,8 +298,6 @@ void XMLValueSyncTests::testApplySkipsHiddenWidget()
 
 void XMLValueSyncTests::testApplyByName()
 {
-    FG_REQUIRE_GRAPHICS();
-
     fgSetDouble(TEST_PROP, 1.0);
     auto dlg = makeDialog(TEST_PROP, false);
     auto w = dlg->widgetByName("w");
