@@ -56,6 +56,8 @@ FGClimate::FGClimate()
         _image_height = static_cast<double>( image->t() );
         _epsilon = 36.0/_image_width;
     }
+    _snowLevelInterp.addEntry(40.0, 9.8);
+    _snowLevelInterp.addEntry(100.0, 5.5);
 }
 
 void FGClimate::init()
@@ -305,7 +307,7 @@ void FGClimate::update_pressure()
 
     double h = _gl.elevation_m/1000.0;
     double g = _gravityNode->getDoubleValue();
-    double P = P0 * pow(1.0 - L * h / (Tc + 273.1), g * M / (L * R0));
+    double P = P0 * pow(1.0 - L * h / (Tc + SG_DEG_C_OFFSET), g * M / (L * R0));
 
     // partial pressure of dry air
     double Pd = P - Pv;
@@ -894,15 +896,7 @@ void FGClimate::set_environment()
         _set(_lichen_cover, 0.5*pow(_wetness*cover, 1.5));
     }
 
-    // Snow level: linear interpolation from 40% to 100% RH, dry adiabatic (9.8) below 40%
-    double lapse_rate;
-    if (humidity <= 40.0) {
-        lapse_rate = 9.8;
-    } else {
-        // 40% → 9.8, 100% → 5.5
-        double t = (humidity - 40.0) / 60.0; // 0~1
-        lapse_rate = 9.8 - t * 4.3;
-    }
+    double lapse_rate = std::max(_snowLevelInterp.interpolate(humidity), 9.8);
     _set(_snow_level, 1000.0 * _sl.temperature_mean / lapse_rate);
 
     _rootNode->setDoubleValue("daytime-pct", _daytime*100.0);

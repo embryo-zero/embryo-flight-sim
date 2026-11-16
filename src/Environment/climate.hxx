@@ -10,8 +10,9 @@
 #include <osg/ref_ptr>
 #include <osg/Image>
 
-#include <simgear/props/tiedpropertylist.hxx>
 #include <simgear/math/SGGeod.hxx>
+#include <simgear/math/interpolater.hxx>
+#include <simgear/props/tiedpropertylist.hxx>
 
 #define REPORT_TO_CONSOLE	0
 
@@ -43,6 +44,7 @@ private:
 
     } _ground_tile;
     using ClimateTile = struct _ground_tile;
+    SGInterpTable _snowLevelInterp;
 
 public:
     FGClimate();
