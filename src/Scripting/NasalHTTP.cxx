@@ -69,26 +69,36 @@ static naRef f_request_abort( simgear::HTTP::Request&,
     return naNil();
 }
 
+static naRef f_request_set_body_data(simgear::HTTP::Request& req,
+                                     const nasal::CallContext& ctx)
+{
+    const std::string data = ctx.requireArg<std::string>(0);
+    const std::string type = ctx.getArg<std::string>(1, "text/plain");
+    req.setBodyData(data, type);
+    return ctx.me;
+}
+
 //------------------------------------------------------------------------------
 naRef initNasalHTTP(naRef globals, naContext c)
 {
   using simgear::HTTP::Request;
   typedef Request* (Request::*HTTPCallback)(const Request::Callback&);
   NasalRequest::init("http.Request")
-    .member("url", &Request::url)
-    .member("method", &Request::method)
-    .member("scheme", &Request::scheme)
-    .member("path", &Request::path)
-    .member("host", &Request::host)
-    .member("port", &Request::port)
-    .member("query", &Request::query)
-    .member("status", &Request::responseCode)
-    .member("reason", &Request::responseReason)
-    .member("readyState", &Request::readyState)
-    .method("abort", f_request_abort)
-    .method("done", static_cast<HTTPCallback>(&Request::done))
-    .method("fail", static_cast<HTTPCallback>(&Request::fail))
-    .method("always", static_cast<HTTPCallback>(&Request::always));
+      .member("url", &Request::url)
+      .member("method", &Request::method)
+      .member("scheme", &Request::scheme)
+      .member("path", &Request::path)
+      .member("host", &Request::host)
+      .member("port", &Request::port)
+      .member("query", &Request::query)
+      .member("status", &Request::responseCode)
+      .member("reason", &Request::responseReason)
+      .member("readyState", &Request::readyState)
+      .method("setBodyData", f_request_set_body_data)
+      .method("abort", f_request_abort)
+      .method("done", static_cast<HTTPCallback>(&Request::done))
+      .method("fail", static_cast<HTTPCallback>(&Request::fail))
+      .method("always", static_cast<HTTPCallback>(&Request::always));
 
   using simgear::HTTP::FileRequest;
   NasalFileRequest::init("http.FileRequest")
