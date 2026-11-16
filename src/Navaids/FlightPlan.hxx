@@ -124,6 +124,9 @@ public:
     double speedMach() const;
 
     RouteRestriction altitudeRestriction() const;
+
+    /// units the altitude was specified in (feet, metres or flight level)
+    RouteUnits altitudeUnits() const;
     RouteRestriction speedRestriction() const;
 
     void setSpeed(RouteRestriction ty, double speed, RouteUnits units = DEFAULT_UNITS);
@@ -413,8 +416,9 @@ public:
   class DelegateFactory
   {
   public:
-    virtual Delegate* createFlightPlanDelegate(FlightPlan* fp) = 0;
-    virtual void destroyFlightPlanDelegate(FlightPlan* fp, Delegate* d);
+      virtual ~DelegateFactory() = default;
+      virtual Delegate* createFlightPlanDelegate(FlightPlan* fp) = 0;
+      virtual void destroyFlightPlanDelegate(FlightPlan* fp, Delegate* d);
   };
 
   static void registerDelegateFactory(DelegateFactoryRef df);

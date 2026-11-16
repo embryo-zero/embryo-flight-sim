@@ -127,16 +127,19 @@ public:
 
     double constraintAltitude(RouteUnits aUnits = DEFAULT_UNITS) const;
 
-// wrapper - asserts if restriction type is _MACH
-  double speedKts() const;
+    /// the units the altitude constraint was originally specified in
+    RouteUnits altitudeUnits() const { return _altitudeUnits; }
 
-// wrapper - asserts if restriction type is not _MACH
-  double speedMach() const;
+    // wrapper - asserts if restriction type is _MACH
+    double speedKts() const;
 
-  virtual RouteRestriction altitudeRestriction() const
-  {
-      return _altRestrict;
-  }
+    // wrapper - asserts if restriction type is not _MACH
+    double speedMach() const;
+
+    virtual RouteRestriction altitudeRestriction() const
+    {
+        return _altRestrict;
+    }
 
   virtual RouteRestriction speedRestriction() const
   {

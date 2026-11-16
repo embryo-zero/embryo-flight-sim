@@ -11,6 +11,7 @@ set(SOURCES
     new_gui.cxx
     FGColor.cxx
     FileDialog.cxx
+    FlightPlanModel.cxx
     ItemModel.cxx
     NasalItemView.cxx
     MouseCursor.cxx
@@ -32,6 +33,7 @@ set(HEADERS
     new_gui.hxx
     FGColor.hxx
     FileDialog.hxx
+    FlightPlanModel.hxx
     ItemModel.hxx
     MouseCursor.hxx
     PositionedQueryModel.hxx

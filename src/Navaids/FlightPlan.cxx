@@ -1636,6 +1636,15 @@ RouteRestriction FlightPlan::Leg::altitudeRestriction() const
   return _waypt->altitudeRestriction();
 }
 
+RouteUnits FlightPlan::Leg::altitudeUnits() const
+{
+    if (_altRestrict != RESTRICT_NONE) {
+        return _altitudeUnits;
+    }
+
+    return _waypt->altitudeUnits();
+}
+
 RouteRestriction FlightPlan::Leg::speedRestriction() const
 {
   if (_speedRestrict != RESTRICT_NONE) {

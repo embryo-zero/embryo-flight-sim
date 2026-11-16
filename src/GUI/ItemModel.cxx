@@ -21,11 +21,14 @@
 
 #include <Airports/airport.hxx>
 
+#include <Autopilot/route_mgr.hxx>
 #include <GUI/AirportListModel.hxx>
 #include <GUI/AirportParkingModel.hxx>
 #include <GUI/AnyUtils.hxx>
+#include <GUI/FlightPlanModel.hxx>
 #include <GUI/ItemModel.hxx>
 #include <GUI/PositionedQueryModel.hxx>
+#include <Main/globals.hxx>
 #include <Scripting/NasalSys.hxx>
 #include <Translations/FGTranslate.hxx>
 
@@ -578,6 +581,17 @@ static naRef f_itemModelFind(ItemModel& m, const nasal::CallContext& ctx)
     return ctx.to_nasal(m.find(ctx.requireArg<std::any>(0), key));
 }
 
+// gui.FlightPlanModel.new() shows the route-manager's active flight plan at
+// the time of the call; there's no way to pass a different plan yet.
+static naRef f_makeFlightPlanModel(const nasal::CallContext& ctx)
+{
+    auto model = SGSharedPtr<FlightPlanModel>(new FlightPlanModel());
+    if (auto rm = globals->get_subsystem<FGRouteMgr>()) {
+        model->setFlightPlan(rm->flightPlan());
+    }
+    return ctx.to_nasal(model);
+}
+
 void ItemModel::setupGhosts(nasal::Hash& ns)
 {
     // constants for the change type passed to listeners, see addNasalChangeListener
@@ -647,6 +661,14 @@ void ItemModel::setupGhosts(nasal::Hash& ns)
         .member("icao", &AirportParkingModel::setIcao)
         .member("airport", &AirportParkingModel::setAirport)
         .member("parkingType", &AirportParkingModel::setParkingType);
+
+    nasal::Ghost<SGSharedPtr<FlightPlanModel>>::init("gui.FlightPlanModel")
+        .bases<ItemModelRef>()
+        .member("useMagnetic", &FlightPlanModel::useMagnetic, &FlightPlanModel::setUseMagnetic)
+        .member("includeHidden", &FlightPlanModel::includeHidden, &FlightPlanModel::setIncludeHidden);
+
+    nasal::Hash flightPlanModel_hash = ns.createHash("FlightPlanModel");
+    flightPlanModel_hash.set("new", &f_makeFlightPlanModel);
 
     nasal::Hash aptParkingModel_hash = ns.createHash("AirportParkingModel");
     aptParkingModel_hash.set("new", &f_makeAirportParkingModel);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // SPDX-FileCopyrightText: 2025 James Turner <james@flightgear.org>
 
+#include "test_flightPlanModel.hxx"
 #include "test_fontMetrics.hxx"
 #include "test_itemModel.hxx"
 #include "test_nasalMenu.hxx"
@@ -13,3 +14,4 @@ CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(NasalMenuTests, "Unit tests");
 CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(ItemModelTests, "Unit tests");
 CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(FontMetricsTests, "Unit tests");
 CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(XMLValueSyncTests, "Unit tests");
+CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(FlightPlanModelTests, "Unit tests");
